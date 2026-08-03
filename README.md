@@ -1,38 +1,28 @@
-# Adapta11
+# Adapta 11
 
 ## Resumen ejecutivo
 
-Presenta una síntesis del proyecto, incluyendo el contexto en el que surge, la problemática u oportunidad identificada, la solución propuesta, su alcance general y el valor que aporta. Debe permitir al lector comprender rápidamente de qué trata el proyecto y por qué es relevante.
+Adapta 11 es un sistema adaptativo para la preparación de las pruebas Saber 11 que utiliza modelos de lenguaje y una arquitectura basada en agentes de inteligencia artificial para personalizar el proceso de aprendizaje de cada estudiante. El proyecto surge como respuesta a las limitaciones de los simulacros tradicionales, los cuales presentan el mismo conjunto de preguntas para todos los usuarios sin considerar su desempeño, fortalezas, debilidades u objetivos de puntaje.
 
+La solución propuesta implementa un banco de preguntas semilla para las áreas de Matemáticas y Lectura Crítica, complementado con agentes capaces de generar nuevas preguntas alineadas con los estándares nacionales de educación. Estas preguntas pasan por un proceso de validación heurística antes de ser incorporadas al banco de preguntas disponible para los estudiantes. Adicionalmente, el sistema analiza el historial de respuestas y el desempeño del usuario para ajustar dinámicamente la dificultad de los ejercicios y ofrecer una ruta de aprendizaje personalizada.
+
+El alcance del proyecto contempla el desarrollo de un prototipo funcional que integra generación automática de preguntas, validación de contenido, perfilamiento del estudiante, retroalimentación explicable y un panel de seguimiento del progreso. El sistema está orientado a servir como una herramienta de apoyo para la preparación del Saber 11, sin reemplazar los mecanismos oficiales de evaluación del ICFES.
 
 ## Documentación del repositorio
-
-### Primer informe
-
-- [Primer Informe.md](./PrimerInforme.md): Documento que presenta el planteamiento del problema, los objetivos, la solución propuesta, el estado del arte, la metodología de desarrollo y el plan de trabajo del proyecto.
-
-### Segundo informe
-
-- [Segundo Informe.md](./SegundoInforme.md): Documento que presenta el estado actual del proyecto, incluyendo los avances logrados, las validaciones realizadas y los aspectos pendientes.
-
-
-### Informe final
-
-| Documento | Descripción |
-|---|---|
-| [InformeFinal.md](./InformeFinal.md) | Documento principal del proyecto |
-| [Instalación.md](./Instalación.md) | Guía de instalación, desarrollo y despliegue |
-| [Desarrollo.md](./Desarrollo.md) | Detalles técnicos del desarrollo |
 
 ## Estudiantes
 
 | Nombre | GitHub |
 |---|---|
-| Nombre Apellido | [@usuario1](https://github.com/usuario1) |
-| Nombre Apellido | [@usuario2](https://github.com/usuario2) |
-| Nombre Apellido | [@usuario3](https://github.com/usuario3) |
+| José Gayón | [@jgayon](https://github.com/jgayon) |
+| Vanessa Orozco | [@Vanessaorozco](https://github.com/Vanessaorozco) |
+| Yassary Garcia | [@yassarygarciait](https://github.com/yassarygarciait) |
 
 ## Tutores
 
-- Nombre del tutor 1
-- Nombre del tutor 2
+- Eduardo Angulo
+
+
+
+
+
