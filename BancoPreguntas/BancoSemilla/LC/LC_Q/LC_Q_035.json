@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_035",
+  "context_id": "LC_CTX_018",
+  "question": "En el Fragmento tomado del texto: \"Que el matrimonio no se basara en el amor no quiere decir que las personas no se enamoraran. Sin embargo, en algunas culturas se trata de algo incompatible con el matrimonio\", ¿qué función cumple el conector \"Sin embargo\"?",
+  "options": {
+    "A": "Introducir un nuevo tema de reflexión.",
+    "B": "Negar información suministrada previamente.",
+    "C": "Agregar nuevos detalles acerca de lo dicho anteriormente.",
+    "D": "Contrastar la información anterior sin llegar a invalidarla."
+  },
+  "answer": "D",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

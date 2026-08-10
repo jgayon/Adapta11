@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_045",
+  "context_id": "LC_CTX_019",
+  "question": "¿Qué se puede inferir de la información que presenta la infografía en el cuadro inferior izquierdo, sobre la cantidad relativa de muertes por accidentes de tránsito en función de la región?",
+  "options": {
+    "A": "Cuáles son los países donde menos se utilizan vehículos motorizados.",
+    "B": "Cuáles zonas tienen el mismo número de muertes por accidente.",
+    "C": "Cuál es el riesgo de morir en un accidente de tránsito según la zona geográfica.",
+    "D": "Cuáles son las zonas geográficas en donde se requiere un mejoramiento de las vías."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

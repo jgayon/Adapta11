@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_018",
+  "context_id": "LC_CTX_009",
+  "question": "Considere el siguiente resumen del texto: “La autora analiza la relación entre el turismo y la fotografía, teniendo en cuenta que los cosmopolitas ven en sus viajes al acto de fotografiar como una necesidad. Según ella, ese acto acaba por convertirse en una práctica trivial con la que solo se busca mitigar la desorientación general que causan los viajes. Así, la fotografía se convierte para los cosmopolitas japoneses, estadounidenses y alemanes en una especie de reemplazo del trabajo al que están acostumbrados”. El anterior resumen se puede describir como inadecuado porque",
+  "options": {
+    "A": "expone ideas contrarias a las afirmaciones principales del texto.",
+    "B": "se centra en un tipo particular de turistas y no en los turistas en general.",
+    "C": "omite el tono irónico y burlón con que la autora se refiere al arte de la fotografía.",
+    "D": "se detiene en presentar información en extremo detallada y secundaria del texto."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_042",
+  "context_id": "LC_CTX_019",
+  "question": "Según la infografía, “los países de ingresos medios solo tienen la mitad de los vehículos existentes en el mundo y, a pesar de eso, sufren el 80 % de las muertes por accidente de tránsito”. En este enunciado, ¿qué función cumple la conjunción ‘a pesar de’?",
+  "options": {
+    "A": "Resaltar que el índice de muertes por accidente de tránsito en países de ingresos medios es bastante elevado dadas sus condiciones particulares.",
+    "B": "Oponer el alto número de vehículos en países de ingresos medios frente al bajo porcentaje de muertes por accidente de tránsito.",
+    "C": "Aclarar que el alto índice de muertes por accidente de tránsito en países de ingresos medios está estrechamente relacionado con el número de autos.",
+    "D": "Señalar que el índice de muertes por accidente de tránsito en países de ingresos medios puede ser aún más alto de lo dicen las cifras oficiales."
+  },
+  "answer": "A",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

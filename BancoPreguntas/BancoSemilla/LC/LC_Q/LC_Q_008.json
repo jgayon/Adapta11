@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_008",
+  "context_id": "LC_CTX_003",
+  "question": "De acuerdo con el propósito del texto, ¿cuál de las siguientes opciones NO presenta una buena razón para incluir imágenes en la infografía?",
+  "options": {
+    "A": "La descripción verbal se debe acompañar de un ejemplo gráfico.",
+    "B": "Se debe ilustrar en qué lugares se puede llevar a cabo la reanimación.",
+    "C": "Se le debe aclarar al lector qué debe hacer en cada etapa de la reanimación.",
+    "D": "Se deben representar los pasos que debe realizar una persona para reanimar a otra."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_002",
+  "context_id": "LC_CTX_001",
+  "question": "El fragmento lo narra",
+  "options": {
+    "A": "Un testigo que solo cuenta lo que ve.",
+    "B": "Johnny, el protagonista.",
+    "C": "Un personaje de la historia que cuenta lo que le contaron.",
+    "D": "Alguien que conoce a Johnny."
+  },
+  "answer": "D",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

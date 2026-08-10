@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_030",
+  "context_id": "LC_CTX_017",
+  "question": "De los siguientes enunciados, ¿cuál presenta un supuesto subyacente a la afirmación “Todo hombre piensa que la injusticia le brinda más ventajas individuales que la justicia, y está en lo cierto, si habla de acuerdo con esta teoría”?",
+  "options": {
+    "A": "La injusticia brinda las mismas ventajas individuales que la justicia.",
+    "B": "La justicia, al igual que la injusticia, brinda ventajas individuales.",
+    "C": "La injusticia, a diferencia de la justicia, brinda pocas ventajas individuales.",
+    "D": "La justicia no brinda ninguna de las ventajas individuales que la injusticia brinda."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

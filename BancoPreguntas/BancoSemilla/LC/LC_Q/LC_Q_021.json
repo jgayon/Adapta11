@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_021",
+  "context_id": "LC_CTX_011",
+  "question": "¿En cuál de los siguientes contextos se inscribe mejor la caricatura?",
+  "options": {
+    "A": "Anuncio publicitario.",
+    "B": "Reportaje gráfico.",
+    "C": "Humor gráfico.",
+    "D": "Sátira política."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

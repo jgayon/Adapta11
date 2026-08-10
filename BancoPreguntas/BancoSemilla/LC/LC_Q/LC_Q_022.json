@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_022",
+  "context_id": "LC_CTX_012",
+  "question": "¿Cuál de los siguientes es un ejemplo que menciona el autor para apoyar su posición frente a los Gobiernos?",
+  "options": {
+    "A": "La guerra con México.",
+    "B": "Los abusos del ejército.",
+    "C": "La tiranía de las mayorías.",
+    "D": "La debilidad de las minorías."
+  },
+  "answer": "A",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

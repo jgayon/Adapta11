@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_023",
+  "context_id": "LC_CTX_013",
+  "question": "De acuerdo con el enunciado “Los sistemas filosóficos difieren los unos de los otros menos en la manera de resolver que en la manera de escamotear los problemas”, ¿cuál es la principal diferencia entre un sistema filosófico y otro?",
+  "options": {
+    "A": "La manera de plantear los problemas.",
+    "B": "La manera de resolver los problemas.",
+    "C": "La manera de esquivar los problemas.",
+    "D": "La manera de burlarse de los problemas."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

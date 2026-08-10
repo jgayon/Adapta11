@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_043",
+  "context_id": "LC_CTX_019",
+  "question": "Si alguien lee la infografía y hace la siguiente descripción: «La infografía muestra datos sobre la frecuencia de los accidentes de tránsito en el mundo, y ejemplos relacionados. Además, informa sobre la mortalidad por género, por ingresos, por número de vehículos, por tipo de vehículo y por ubicación regional.» Usted diría que la descripción es insatisfactoria porque:",
+  "options": {
+    "A": "Pasa por alto información esencial contenida en la infografía.",
+    "B": "El orden de su contenido no corresponde con el de la infografía.",
+    "C": "Expone información que no está presente en la infografía.",
+    "D": "Omite evidencias que sustentan la información de la infografía."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

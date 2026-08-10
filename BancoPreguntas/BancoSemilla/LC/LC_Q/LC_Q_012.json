@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_012",
+  "context_id": "LC_CTX_005",
+  "question": "El autor del texto aplica a la filosofía de la ciencia el principio del liberalismo, según el cual “todos los ciudadanos son iguales ante la ley y ante el Estado”. De acuerdo con esto, ¿cuál de las siguientes afirmaciones refleja de manera más directa la influencia de las ideas liberales?",
+  "options": {
+    "A": "La tarea del científico no ha de ser por más tiempo la glorificación de dios.",
+    "B": "Toda teoría particular, todo cuento de hadas, todo mito, forman parte del conocimiento.",
+    "C": "Hacer de la causa más débil la causa más fuerte, por ello en apoyar el movimiento de conjunto.",
+    "D": "El conocimiento no consiste en una serie de teorías autoconsistentes que tiende a converger en una perspectiva ideal."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_029",
+  "context_id": "LC_CTX_017",
+  "question": "¿Cuál de las siguientes afirmaciones contradice las ideas que presenta el autor?",
+  "options": {
+    "A": "Algunas personas actúan justamente a pesar de poder actuar de manera injusta.",
+    "B": "La injusticia, contrariamente a la justicia, es natural en el ser humano.",
+    "C": "Actuar con justicia brinda menos ventajas que hacerlo con injusticia.",
+    "D": "La injusticia, contrariamente a la justicia, se comete voluntariamente."
+  },
+  "answer": "A",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_041",
+  "context_id": "LC_CTX_018",
+  "question": "De acuerdo con el texto, ¿qué se puede concluir acerca del matrimonio?",
+  "options": {
+    "A": "Que es una institución que tiene únicamente propósitos económicos y políticos.",
+    "B": "Que es la base de la familia en culturas tan diversas y complejas como las nuestras.",
+    "C": "Que es una institución que varía dependiendo del contexto histórico y social.",
+    "D": "Que es un pacto entre dos individuos que debe basarse en el amor y la confianza."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

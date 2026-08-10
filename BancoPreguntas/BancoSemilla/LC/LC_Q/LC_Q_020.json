@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_020",
+  "context_id": "LC_CTX_010",
+  "question": "De acuerdo a su contenido, ¿qué otro título podría ajustarse al texto?",
+  "options": {
+    "A": "Civilización y barbarie en la colonización española.",
+    "B": "Fray Pedro de Aguado y la construcción retórica del indígena.",
+    "C": "El canibalismo ritual en la crónica de fray Pedro de Aguado.",
+    "D": "La influencia de los autores clásicos en los cronistas neogranadinos: el caso de Aguado."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

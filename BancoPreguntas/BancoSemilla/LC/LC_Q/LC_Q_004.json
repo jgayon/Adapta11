@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_004",
+  "context_id": "LC_CTX_002",
+  "question": "¿Cuál de las siguientes citas refuerza la idea de que el comportamiento de la avispa Sphex no resulta de un proceso de pensamiento racional?",
+  "options": {
+    "A": "“La avispa lleva al grillo a su madriguera, deja sus huevos, cierra la madriguera y luego se va para no volver”.",
+    "B": "“La avispa nunca piensa en llevar al grillo directamente a su madriguera. En una ocasión, este procedimiento fue repetido cuarenta veces, siempre con el mismo resultado”.",
+    "C": "“Para la mente humana, tal rutina tan organizada y aparentemente llena de propósitos lleva consigo un sabor de lógica y de pensamiento”.",
+    "D": "“Por ejemplo, la rutina de la avispa consiste en llevar al grillo hacia la madriguera, dejarlo en la entrada, ir adentro a revisar que todo esté bien, salir y luego dejar el grillo adentro”."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_019",
+  "context_id": "LC_CTX_010",
+  "question": "De acuerdo con el texto, se puede afirmar que la descripción de los indios de Ibagué hecha por Aguado corresponde a",
+  "options": {
+    "A": "un periodo anterior a la llegada de los españoles al continente americano, pues presenta a los indígenas en una situación de “salvajismo” absoluto.",
+    "B": "el proceso de fundación de la ciudad colonial de Ibagué, pues la dinámica de colonización consistía en fundar las ciudades y luego someter a los indígenas de la zona.",
+    "C": "la etapa de “conquista” de los territorios que se anexarían a la colonia neogranadina, pues la descripción es parte de un relato de una campaña militar.",
+    "D": "un periodo histórico indeterminado, pues el texto no ofrece información cronológica que permita identificar el momento que corresponde a la descripción."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

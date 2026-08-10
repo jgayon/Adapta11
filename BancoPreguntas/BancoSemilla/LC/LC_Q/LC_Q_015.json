@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_015",
+  "context_id": "LC_CTX_008",
+  "question": "Teniendo en cuenta la información que brinda el texto, ¿cuál de las siguientes afirmaciones es compatible con las políticas del Partido?",
+  "options": {
+    "A": "El pueblo debe mantenerse unido.",
+    "B": "La individualidad debe ser eliminada.",
+    "C": "El poder está en ser fiel a uno mismo.",
+    "D": "Un pueblo ignorante es más poderoso."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

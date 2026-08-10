@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_003",
+  "context_id": "LC_CTX_001",
+  "question": "Desde la información que brinda el texto, ¿cuál de las siguientes palabras describe mejor a Johnny?",
+  "options": {
+    "A": "Vividor.",
+    "B": "Generoso.",
+    "C": "Trabajador.",
+    "D": "Mezquino."
+  },
+  "answer": "A",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Identifica y entiende los contenidos locales que conforman un texto."
+}

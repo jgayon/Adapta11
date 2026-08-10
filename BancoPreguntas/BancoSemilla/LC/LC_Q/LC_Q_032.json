@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_032",
+  "context_id": "LC_CTX_017",
+  "question": "¿Cuál de las siguientes afirmaciones sintetiza adecuadamente las ideas contenidas en el primer párrafo del texto?",
+  "options": {
+    "A": "El que alguien sea justo es un deber que se deriva de la conciencia moral que tienen todos los hombres.",
+    "B": "El que alguien sea justo resulta de una imposición, pues toda persona sin las restricciones y exigencias de la ley buscará satisfacer sus deseos.",
+    "C": "La justicia es una ilusión, ya que lo natural es que una persona busque cumplir sus deseos y alcanzar sus intereses, sin reparar en la igualdad que exige la ley.",
+    "D": "La justicia es un ideal inalcanzable, ya que toda persona, por más justa que aparente ser, tiene intereses propios que pueden llevarla a cometer injusticias."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_009",
+  "context_id": "LC_CTX_004",
+  "question": "En el fragmento del texto: \"Si llego tarde a casa, sobre el pálido desierto de la mesa lucirá, con suerte, el laguito rojo de un tomate cortado al medio\", ¿para qué se utilizan las expresiones \"pálido desierto de la mesa\" y \"laguito rojo de un tomate\"?",
+  "options": {
+    "A": "Para resaltar el poco esfuerzo de Diego en la cocina.",
+    "B": "Para explicar por qué Diego no se esforzó en la cocina.",
+    "C": "Para justificar el poco esfuerzo de Diego en la cocina.",
+    "D": "Para ilustrar el buen trabajo de Diego en la cocina."
+  },
+  "answer": "A",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

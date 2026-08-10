@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_010",
+  "context_id": "LC_CTX_004",
+  "question": "En el texto, ¿por qué la narradora finge enojarse cuando Diego le dice que es una buena ama de casa?",
+  "options": {
+    "A": "Porque no quiere ser catalogada como ama de casa.",
+    "B": "Porque no es cierto que sea una buena ama de casa.",
+    "C": "Porque no le gusta que la comparen con su mamá.",
+    "D": "Porque no siente afecto por las mujeres que son amas de casa."
+  },
+  "answer": "A",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

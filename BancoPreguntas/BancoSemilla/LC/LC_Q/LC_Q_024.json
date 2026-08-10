@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_024",
+  "context_id": "LC_CTX_014",
+  "question": "Considere el siguiente enunciado tomado del texto: \"No me di cuenta de que no era científico discutir sobre el comportamiento en términos de motivación o propósito\". ¿Qué prejuicio cuestiona la autora por medio del enunciado anterior?",
+  "options": {
+    "A": "Los animales tienen mente y, por tanto, deben tratarse como seres con personalidades o emociones.",
+    "B": "La etología es una ciencia “dura” que se esfuerza por mantener a raya las explicaciones subjetivas.",
+    "C": "Las explicaciones científicas sobre el comportamiento no deben tener en cuenta la intención al explicar la conducta.",
+    "D": "La variabilidad entre animales individuales es un hecho contingente que la etología no debe considerar."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

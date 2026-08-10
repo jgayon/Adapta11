@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_028",
+  "context_id": "LC_CTX_016",
+  "question": "¿Cuál de los siguientes títulos podría ser el más adecuado para el texto anterior?",
+  "options": {
+    "A": "En defensa del mal gusto en el arte.",
+    "B": "El arte como modelo de la realidad.",
+    "C": "La representación de la belleza en el arte.",
+    "D": "Rubens, Durero y Murillo: el arte de la pintura."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

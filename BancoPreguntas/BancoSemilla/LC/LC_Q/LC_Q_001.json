@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_001",
+  "context_id": "LC_CTX_001",
+  "question": "En el último párrafo del texto se utiliza la palabra \"famélico\" para describir a Johnny. ¿Cuál de los siguientes adjetivos le da un sentido contrario al significado que tiene esta palabra en el texto?",
+  "options": {
+    "A": "Magro.",
+    "B": "Enjuto.",
+    "C": "Relleno.",
+    "D": "Esquelético."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Identifica y entiende los contenidos locales que conforman un texto."
+}

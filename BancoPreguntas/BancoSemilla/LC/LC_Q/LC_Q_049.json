@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_049",
+  "context_id": "LC_CTX_019",
+  "question": "De acuerdo con el contenido de la información presentada, ¿a cuál de los siguientes contextos se adecuaría mejor la infografía?",
+  "options": {
+    "A": "Una protesta ecológica en contra del uso de vehículos motorizados.",
+    "B": "Una exposición sobre el transporte público como alternativa de movilidad.",
+    "C": "Una campaña diseñada para promover la adquisición de seguros de vida.",
+    "D": "Un estudio sobre asesinatos según el género y la condición socioeconómica."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_006",
+  "context_id": "LC_CTX_003",
+  "question": "De acuerdo con la infografía, ¿en qué momento se requiere proceder a efectuar una reanimación cardíaca?",
+  "options": {
+    "A": "Después de confirmar que la víctima reacciona.",
+    "B": "Después de comprobar que la víctima no tiene pulso.",
+    "C": "En el momento en que la víctima muestra problemas de respiración.",
+    "D": "En el momento en que la víctima está en posición de recuperación."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

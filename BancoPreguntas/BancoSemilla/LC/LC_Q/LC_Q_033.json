@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_033",
+  "context_id": "LC_CTX_017",
+  "question": "Dada la estructura del texto anterior, ¿qué propósito general tiene el autor al introducir el relato sobre el anillo de Giges, y cómo lo alcanza?",
+  "options": {
+    "A": "Promover en la audiencia la idea de que es más ventajoso seguir el camino de la injusticia. El caso de Giges muestra cómo obtuvo beneficios gracias al comportamiento injusto que le posibilitó el anillo.",
+    "B": "Convencer a la audiencia de que todo hombre cometerá injusticias cuando tenga la oportunidad. Así lo hizo Giges una vez descubrió el poder que le otorgaba el anillo.",
+    "C": "Reforzar en la audiencia la idea de que todos cometemos injusticias. El caso de Giges ilustra cómo las personas aparentemente justas en realidad cometen grandes injusticias.",
+    "D": "Persuadir a la audiencia de que actuar justamente requiere mucha fuerza de voluntad. En el caso de Giges, la tentación derivada del poder del anillo doblegó su voluntad."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

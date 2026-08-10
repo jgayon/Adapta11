@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_026",
+  "context_id": "LC_CTX_016",
+  "question": "En el texto, ¿para qué el autor hace referencia a Rubens?",
+  "options": {
+    "A": "Para mostrar que a todos nos atrae lo bello y por fortuna el arte lo recoge en la pintura.",
+    "B": "Para resaltar que el público siempre exige que el artista refleje la realidad en los cuadros.",
+    "C": "Para manifestar que algunos artistas plasman en sus obras lo que nos gusta ver en la realidad.",
+    "D": "Para concluir que la inclinación en el arte por los temas bonitos y atractivos es bastante nociva."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_038",
+  "context_id": "LC_CTX_018",
+  "question": "De acuerdo con el texto, ¿cuál de los siguientes enunciados apoya la idea de que el amor maduro y sincero no siempre ha sido considerado como la base de la familia?",
+  "options": {
+    "A": "En los años 50 se produjo una marcada distinción entre los roles masculino y femenino en la familia.",
+    "B": "La idea del amor como la razón que ha de llevar al matrimonio surgió con el movimiento romántico en el siglo XVIII.",
+    "C": "Ambos miembros de la pareja deben poner mucho empeño para que el matrimonio se sostenga.",
+    "D": "El matrimonio se consolidó en el siglo XIX como la principal forma de institucionalización del amor conyugal."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

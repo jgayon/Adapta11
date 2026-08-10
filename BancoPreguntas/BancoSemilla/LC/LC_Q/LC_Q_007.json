@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_007",
+  "context_id": "LC_CTX_003",
+  "question": "En caso de que la víctima no respire, ¿qué procedimiento se sugiere seguir en la infografía?",
+  "options": {
+    "A": "Saltar al paso 5 (tomar el pulso).",
+    "B": "Llamar a un número de emergencias.",
+    "C": "Realizar una respiración boca a boca.",
+    "D": "Llevar a cabo una reanimación cardiopulmonar."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

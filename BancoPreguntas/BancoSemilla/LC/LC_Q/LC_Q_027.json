@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_027",
+  "context_id": "LC_CTX_016",
+  "question": "¿Cuál de los siguientes enunciados expresa un juicio de valor presente en el texto?",
+  "options": {
+    "A": "Mientras Rubens dibujó la juventud, Durero dibujó la vejez.",
+    "B": "Los golfillos del pintor español Murillo tienen gran encanto.",
+    "C": "Rubens estaba orgulloso de su hijo y deseaba que lo admiráramos.",
+    "D": "Para el público, la hermosura de un cuadro reside en la belleza de su tema."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

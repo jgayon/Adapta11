@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_005",
+  "context_id": "LC_CTX_002",
+  "question": "¿Cuál de los siguientes enunciados sintetiza el tema principal del texto?",
+  "options": {
+    "A": "El comportamiento aparentemente inteligente de la avispa Sphex.",
+    "B": "El papel de los grillos en la alimentación de las avispas Sphex.",
+    "C": "La avispa Sphex como un caso que prueba la inteligencia animal.",
+    "D": "Los métodos de crianza y las precauciones de las avispas Sphex."
+  },
+  "answer": "A",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

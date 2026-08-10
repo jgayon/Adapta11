@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_046",
+  "context_id": "LC_CTX_019",
+  "question": "A partir de las gráficas sobre la relación entre el número de vehículos y el número de muertes en accidentes de tránsito se puede inferir que, comparada con la población de los países de ingresos medios, la de los países de ingresos altos",
+  "options": {
+    "A": "tiene más vehículos por persona.",
+    "B": "usa menos el vehículo particular.",
+    "C": "es más educada en materia vial.",
+    "D": "está más expuesta a multas de tránsito."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

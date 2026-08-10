@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_014",
+  "context_id": "LC_CTX_007",
+  "question": "¿Cuál de los siguientes enunciados describe mejor la caricatura?",
+  "options": {
+    "A": "El pueblo hace justicia por su propia mano.",
+    "B": "El linchamiento de un ángel.",
+    "C": "Entrevista con el asesino.",
+    "D": "Un ángel bajó del cielo."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Identifica y entiende los contenidos locales que conforman un texto."
+}

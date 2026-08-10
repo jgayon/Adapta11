@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_031",
+  "context_id": "LC_CTX_017",
+  "question": "¿Cuál de las siguientes afirmaciones constituye una razón a favor de la tesis principal del texto anterior, a saber, que cuando alguien actúa justamente lo hace por obligación y no voluntariamente?",
+  "options": {
+    "A": "La gente se ve obligada a actuar justamente.",
+    "B": "Solo la igualdad garantiza el respeto por la ley.",
+    "C": "La injusticia brinda las mismas ventajas individuales que la justicia.",
+    "D": "Siempre que una persona cuente con la libertad para cometer injusticias lo hará."
+  },
+  "answer": "D",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_011",
+  "context_id": "LC_CTX_005",
+  "question": "¿Cuál de las siguientes opciones describe mejor la relación entre el contenido del texto y el título?",
+  "options": {
+    "A": "El texto introduce la propuesta de un nuevo método para la investigación científica, diferente del tradicional.",
+    "B": "El texto ataca diferentes ideas a propósito de qué es aquello en lo que consiste el llamado “método científico”.",
+    "C": "El texto crítica concepciones del conocimiento científico, el cual se ha concebido como resultado de un método.",
+    "D": "El texto argumenta a favor de la pluralidad de métodos disponibles para que cada ciencia alcance sus verdades."
+  },
+  "answer": "C",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_025",
+  "context_id": "LC_CTX_015",
+  "question": "Teniendo en cuenta los planteamientos dados en la historieta, ¿cuál de los siguientes enunciados contradice la tesis central del texto?",
+  "options": {
+    "A": "No todo se divide entre lo que depende y lo que no depende de nosotros.",
+    "B": "Alejarnos de alguien no depende de nosotros mismos.",
+    "C": "La mente de un filósofo funciona de la misma manera que su cuerpo.",
+    "D": "El juicio y el deseo no dependen de nosotros."
+  },
+  "answer": "B",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}

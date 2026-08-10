@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_037",
+  "context_id": "LC_CTX_018",
+  "question": "En el texto, ¿qué función cumple el tercer párrafo?",
+  "options": {
+    "A": "Presentar un paralelo entre las concepciones del amor y el matrimonio en la China tradicional y en Occidente.",
+    "B": "Demuestrar que en China el enamoramiento entre esposos era una amenaza al respeto y la solidaridad de la familia.",
+    "C": "Sintetizar las razones por las cuales en algunas culturas el enamoramiento y el matrimonio se consideran incompatibles.",
+    "D": "Proveer un ejemplo de como la asociación entre el amor y el matrimonio no es algo propio de todos los tiempos y culturas."
+  },
+  "answer": "D",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

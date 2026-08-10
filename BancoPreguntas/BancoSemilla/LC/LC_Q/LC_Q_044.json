@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_044",
+  "context_id": "LC_CTX_019",
+  "question": "De acuerdo con la información presentada sobre el porcentaje de muertes por tipo de vehículo, se puede afirmar que es más probable que alguien que haya muerto por accidente de tránsito hubiera estado desplazándose",
+  "options": {
+    "A": "a pie.",
+    "B": "en moto.",
+    "C": "en bicicleta.",
+    "D": "en otro tipo de vehículo."
+  },
+  "answer": "D",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Comprende cómo se articulan las partes de un texto para darle un sentido global."
+}

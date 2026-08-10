@@ -1,0 +1,14 @@
+{
+  "id": "LC_Q_013",
+  "context_id": "LC_CTX_006",
+  "question": "En la historieta, el niño intenta justificar el alto precio de la limonada recurriendo a:",
+  "options": {
+    "A": "Argumentos absurdos pero consistentes.",
+    "B": "Un modelo económico fiel a la realidad.",
+    "C": "Una ley de mercado que no existe.",
+    "D": "Su propia versión de la economía."
+  },
+  "answer": "D",
+  "competency": "Comprensión de lectura",
+  "affirmation": "Reflexiona a partir de un texto y evalúa su contenido."
+}
