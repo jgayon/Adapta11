@@ -1,1 +1,102 @@
+Adapta 11
+
+Resumen / Abstract
+
+Adapta 11 es un sistema adaptativo para la preparación de las pruebas Saber 11 que busca personalizar la práctica de los estudiantes mediante la selección inteligente de preguntas de un banco estructurado. El proyecto surge como respuesta a las limitaciones de los simulacros tradicionales, en los que los estudiantes pueden recibir conjuntos de preguntas que no necesariamente corresponden con sus necesidades, fortalezas, debilidades o intereses de aprendizaje.
+
+La solución propuesta utiliza un banco de preguntas para las áreas de Matemáticas y Lectura Crítica, organizado de acuerdo con las competencias, componentes y niveles de dificultad correspondientes. A partir de este banco, el sistema incorpora un seleccionador de preguntas que determina qué ejercicios presentar según dos modalidades: la selección dirigida por el estudiante y la selección adaptativa basada en su desempeño y progreso.
+
+En la primera modalidad, el estudiante puede indicar el área o competencia que desea trabajar. En la segunda, el sistema analiza el historial de respuestas, los aciertos, errores, dificultades identificadas y evolución del desempeño para seleccionar preguntas que respondan a sus necesidades de práctica. De esta manera, el sistema busca priorizar contenidos que requieren refuerzo y ajustar progresivamente la dificultad de las preguntas disponibles.
+
+El proyecto contempla el desarrollo de un prototipo funcional que integra el banco de preguntas, el seleccionador adaptativo, el perfilamiento del estudiante, el registro del desempeño, la retroalimentación explicable y un panel de seguimiento del progreso. Adapta 11 está concebido como una herramienta de apoyo para la preparación del Saber 11 y no pretende reemplazar los mecanismos oficiales de evaluación del ICFES.
+
+1. Introducción
+
+La educación media en Colombia ha incorporado progresivamente herramientas digitales para apoyar los procesos de enseñanza, aprendizaje y preparación para evaluaciones estandarizadas como el Saber 11. En este contexto, los bancos de preguntas, plataformas de práctica y sistemas de seguimiento académico permiten complementar las estrategias tradicionales de preparación. A su vez, las técnicas de inteligencia artificial y análisis de datos ofrecen oportunidades para personalizar la experiencia de aprendizaje a partir de la información generada durante las sesiones de práctica.
+
+Sin embargo, muchas plataformas de preparación presentan experiencias de práctica generales en las que los estudiantes resuelven conjuntos de preguntas sin que la selección considere suficientemente sus diferencias individuales. Esta situación puede provocar que un estudiante dedique tiempo a contenidos que ya domina, mientras recibe poca práctica sobre competencias o componentes en los que presenta dificultades. El problema resulta especialmente relevante en estudiantes de grado once que necesitan aprovechar eficientemente el tiempo disponible para prepararse para el Saber 11.
+
+A partir de esta situación se identifica la necesidad técnica de contar con un mecanismo que permita seleccionar preguntas de manera más pertinente, utilizando tanto la intención del estudiante como la información acumulada sobre su desempeño. La oportunidad de diseño consiste en combinar un banco de preguntas previamente estructurado con un sistema capaz de analizar el progreso del estudiante y determinar qué preguntas son más adecuadas para cada sesión, sin depender de la generación automática de nuevos contenidos.
+
+Como respuesta se propone Adapta 11, un sistema adaptativo para la preparación del Saber 11 que trabaja inicialmente con las áreas de Matemáticas y Lectura Crítica. El sistema permitirá al estudiante seleccionar directamente el área o competencia que desea practicar o utilizar un modo adaptativo en el que las preguntas serán seleccionadas de acuerdo con su historial y progreso. De esta forma, se busca ofrecer una experiencia de práctica personalizada, con seguimiento del desempeño y retroalimentación sobre los resultados obtenidos.
+
+Contextos
+
+Dominio o sector: educación, específicamente preparación académica para las pruebas Saber 11.
+
+Tendencias tecnológicas relevantes: aprendizaje adaptativo, análisis de datos educativos, personalización de contenidos e inteligencia artificial aplicada a la educación.
+
+Rol de los sistemas de información / software / datos: registrar el desempeño del estudiante, organizar el banco de preguntas, analizar el historial de respuestas y apoyar la selección de ejercicios según las necesidades de práctica.
+
+Situación actual
+
+Limitaciones del mercado actual: existen plataformas de preparación que utilizan bancos de preguntas y simulacros con una selección que puede ser poco personalizada.
+
+Carencias funcionales o de diseño: la selección de ejercicios no siempre considera simultáneamente el área que el estudiante desea trabajar y su progreso individual.
+
+Impacto en usuarios: los estudiantes pueden invertir tiempo en contenidos que ya dominan y recibir menor cantidad de práctica en aquellos donde necesitan refuerzo.
+
+Necesidad identificada
+
+Necesidad técnica clara: disponer de un mecanismo que seleccione preguntas de un banco estructurado de acuerdo con la intención y el desempeño del estudiante.
+
+Oportunidad de diseño tecnológico: utilizar el historial de respuestas y el perfil de desempeño para adaptar progresivamente la selección de preguntas.
+
+Propuesta general
+
+Nombre del sistema: Adapta 11.
+
+Funcionalidades clave: banco estructurado de preguntas, selección dirigida por área o competencia, selección adaptativa basada en progreso, perfilamiento, seguimiento y retroalimentación.
+
+Impacto esperado: mejorar la pertinencia de las sesiones de práctica y aprovechar de manera más eficiente el tiempo de preparación para el Saber 11.
+
+2. Planteamiento del problema
+
+Define y delimita el problema central, explicando qué se busca resolver y por qué es relevante.
+
+El problema se define como una carencia o déficit que se manifiesta como un estado negativo en una situación real (no teórica), localizado en una población objetivo bien definida. No debe confundirse con la falta de un servicio específico ni con la inexistencia de una solución tecnológica. El problema no es "hace falta un sistema que integre X", sino la evidencia de una situación deficiente: por ejemplo, "existen aplicaciones diferentes e incompatibles en los distintos departamentos de la empresa, lo que genera desconexión entre las unidades y pérdida de calidad en la información para la toma de decisiones". Tampoco se trata de un trabajo para una empresa en particular, sino de una problemática transferible a contextos similares.
+
+2.1 Descripción del problema
+
+Los estudiantes de grado once que se preparan para las pruebas Saber 11 pueden enfrentarse a bancos de preguntas y simulacros cuya selección de ejercicios no se ajusta suficientemente a sus necesidades individuales de aprendizaje. Cuando la práctica se desarrolla sin considerar el desempeño previo, un estudiante puede recibir preguntas relacionadas con contenidos que ya domina, mientras que las competencias o componentes en los que presenta dificultades pueden no recibir el refuerzo necesario.
+
+Esta situación afecta el aprovechamiento del tiempo de estudio y limita la posibilidad de construir una ruta de práctica diferenciada. El problema no corresponde a la ausencia de preguntas, sino a la dificultad para determinar cuáles preguntas existentes son más pertinentes para cada estudiante en un momento determinado.
+
+La población objetivo está conformada inicialmente por estudiantes de grado once que se encuentran en proceso de preparación para el Saber 11, específicamente en las áreas de Matemáticas y Lectura Crítica.
+
+2.2 Justificación
+
+El problema debe ser atendido porque una selección de preguntas más pertinente puede contribuir a que el tiempo de práctica se concentre en los contenidos que cada estudiante necesita reforzar. Desde el punto de vista académico, el proyecto permite explorar un enfoque de aprendizaje adaptativo aplicado a la preparación del Saber 11.
+
+Desde el punto de vista técnico, Adapta 11 plantea el uso de información del desempeño para tomar decisiones sobre la selección de preguntas. La propuesta diferencia entre la práctica que el estudiante solicita directamente y la práctica que el sistema recomienda a partir de su progreso. Esto permite construir una solución de personalización sin requerir la generación automática de preguntas.
+
+Desde el punto de vista práctico, el sistema busca facilitar una experiencia de preparación más ajustada a las necesidades individuales, proporcionando información sobre fortalezas, dificultades y evolución del desempeño.
+
+2.3 Restricciones y supuestos iniciales
+
+El proyecto se desarrolla dentro del tiempo académico disponible para el curso.
+
+El prototipo se limita inicialmente a las áreas de Matemáticas y Lectura Crítica.
+
+Se asume la disponibilidad de un banco de preguntas previamente estructurado y clasificado.
+
+La calidad de la selección depende de la cantidad, variedad y correcta clasificación de las preguntas disponibles.
+
+El sistema requiere registrar las respuestas y el desempeño del estudiante para realizar la selección adaptativa.
+
+El prototipo se desarrollará en un entorno de pruebas y no contempla un despliegue productivo institucional.
+
+El sistema no generará automáticamente nuevas preguntas mediante modelos de lenguaje o agentes de inteligencia artificial.
+
+3. Alcance del proyecto
+
+Define los límites del proyecto especificando qué incluye y qué no incluye.
+
+Incluye
+
+Funcionalidades principales del sistema: banco de preguntas, clasificación por área, competencia, componente y dificultad, selección dirigida, selección adaptativa, perfilamiento, seguimiento y retroalimentación.
+
+Tipo de usuarios involucrados: estudiantes de grado once en proceso de preparación para el Saber 11.
+
+Nivel de madurez de la solución: prototipo funcional.
 
