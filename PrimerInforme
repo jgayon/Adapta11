@@ -1,8 +1,11 @@
 ## Resumen / Abstract
-Adapta 11 es un sistema adaptativo para la preparación de las pruebas Saber 11 que busca personalizar la práctica de los estudiantes mediante la selección inteligente de preguntas de un banco estructurado. El proyecto surge como respuesta a las limitaciones de los simulacros tradicionales, en los que los estudiantes pueden recibir conjuntos de preguntas que no necesariamente corresponden con sus necesidades, fortalezas, debilidades o intereses de aprendizaje. 
+Adapta 11 es un sistema adaptativo para la preparación de las pruebas Saber 11 que busca personalizar la práctica de 
+los estudiantes mediante la selección inteligente de preguntas de un banco estructurado. 
+El proyecto surge como respuesta a las limitaciones de los simulacros tradicionales, en los que los estudiantes pueden recibir conjuntos de 
+preguntas que no necesariamente corresponden con sus necesidades, fortalezas, debilidades o intereses de aprendizaje. 
 
 
-1. Introducción
+##1. Introducción
 
 La educación media en Colombia ha incorporado progresivamente herramientas digitales para apoyar los procesos de enseñanza, aprendizaje y preparación para evaluaciones estandarizadas como el Saber 11. En este contexto, los bancos de preguntas, plataformas de práctica y sistemas de seguimiento académico permiten complementar las estrategias tradicionales de preparación. A su vez, las técnicas de inteligencia artificial y análisis de datos ofrecen oportunidades para personalizar la experiencia de aprendizaje a partir de la información generada durante las sesiones de práctica.
 
