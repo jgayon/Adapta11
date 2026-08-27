@@ -1,14 +1,6 @@
-Adapta 11
+## Resumen / Abstract
+Adapta 11 es un sistema adaptativo para la preparación de las pruebas Saber 11 que busca personalizar la práctica de los estudiantes mediante la selección inteligente de preguntas de un banco estructurado. El proyecto surge como respuesta a las limitaciones de los simulacros tradicionales, en los que los estudiantes pueden recibir conjuntos de preguntas que no necesariamente corresponden con sus necesidades, fortalezas, debilidades o intereses de aprendizaje. 
 
-Resumen / Abstract
-
-Adapta 11 es un sistema adaptativo para la preparación de las pruebas Saber 11 que busca personalizar la práctica de los estudiantes mediante la selección inteligente de preguntas de un banco estructurado. El proyecto surge como respuesta a las limitaciones de los simulacros tradicionales, en los que los estudiantes pueden recibir conjuntos de preguntas que no necesariamente corresponden con sus necesidades, fortalezas, debilidades o intereses de aprendizaje.
-
-La solución propuesta utiliza un banco de preguntas para las áreas de Matemáticas y Lectura Crítica, organizado de acuerdo con las competencias, componentes y niveles de dificultad correspondientes. A partir de este banco, el sistema incorpora un seleccionador de preguntas que determina qué ejercicios presentar según dos modalidades: la selección dirigida por el estudiante y la selección adaptativa basada en su desempeño y progreso.
-
-En la primera modalidad, el estudiante puede indicar el área o competencia que desea trabajar. En la segunda, el sistema analiza el historial de respuestas, los aciertos, errores, dificultades identificadas y evolución del desempeño para seleccionar preguntas que respondan a sus necesidades de práctica. De esta manera, el sistema busca priorizar contenidos que requieren refuerzo y ajustar progresivamente la dificultad de las preguntas disponibles.
-
-El proyecto contempla el desarrollo de un prototipo funcional que integra el banco de preguntas, el seleccionador adaptativo, el perfilamiento del estudiante, el registro del desempeño, la retroalimentación explicable y un panel de seguimiento del progreso. Adapta 11 está concebido como una herramienta de apoyo para la preparación del Saber 11 y no pretende reemplazar los mecanismos oficiales de evaluación del ICFES.
 
 1. Introducción
 
