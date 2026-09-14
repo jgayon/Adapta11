@@ -17,6 +17,7 @@
     user: null,
     view: 'cargando', // cargando | auth | admin | estudiante
     authTab: 'login',
+    authRole: 'estudiante', // 'estudiante' | 'administrador' -- solo cambia el texto de ayuda del login
     authError: '',
 
     admin: {
@@ -187,29 +188,66 @@
 
   function renderAuth() {
     const t = state.authTab;
+    const isAdminRole = state.authRole === 'administrador';
+    const blockedAdminRegister = t === 'registro' && isAdminRole;
+
     app().innerHTML = `
-      <div class="auth-wrap">
-        <div class="text-center" style="margin-bottom:1.5rem;">
-          <h1>Ruta Saber</h1>
-          <p class="text-muted">Practica guiada para el examen Saber 11</p>
+      <div class="auth-shell">
+        <div class="auth-visual">
+          <div>
+            <div class="visual-brand"><span>Ruta</span><span class="vb-saber">Saber</span><span class="dot"></span></div>
+            <h1>Práctica para el <em>Saber 11</em>,<br>a tu propio ritmo.</h1>
+            <p class="sub">Práctica guiada para Lectura Crítica y Matemáticas, con tu progreso guardado en el servidor.</p>
+            <div class="diff-legend">
+              <span><i class="dotc" style="background:var(--success)"></i>Fácil</span>
+              <span><i class="dotc" style="background:var(--accent)"></i>Media</span>
+              <span><i class="dotc" style="background:#5B8DEF"></i>Difícil</span>
+            </div>
+          </div>
+          <p class="visual-foot">Ruta Saber &middot; examen Saber 11</p>
         </div>
-        <div class="auth-tabs">
-          <button data-tab="login" class="${t === 'login' ? 'active' : ''}">Iniciar sesion</button>
-          <button data-tab="registro" class="${t === 'registro' ? 'active' : ''}">Crear cuenta</button>
-        </div>
-        <div class="card">
-          ${state.authError ? `<div class="error-box">${escapeHtml(state.authError)}</div>` : ''}
-          ${t === 'login' ? formLogin() : formRegistro()}
+        <div class="auth-form-wrap">
+          <div class="auth-card card">
+            <div class="role-toggle">
+              <button type="button" data-role="estudiante" class="${!isAdminRole ? 'active' : ''}">Estudiante</button>
+              <button type="button" data-role="administrador" class="${isAdminRole ? 'active' : ''}">Administrador</button>
+            </div>
+            ${blockedAdminRegister ? `
+              <h2 class="mb-0" style="font-size:1.4rem; margin-bottom:4px;">Cuenta de administrador</h2>
+              <p class="hint" style="margin-bottom:14px;">Este sistema no permite crear cuentas de administrador desde el registro: ya existe una única cuenta. Si eres administrador, inicia sesión con tus credenciales.</p>
+              <button type="button" class="btn btn-primary btn-block" id="btn-ir-login">Ir a iniciar sesión</button>
+            ` : `
+              <h2 class="mb-0" style="font-size:1.4rem; margin-bottom:4px;">${t === 'registro' ? 'Crear cuenta' : 'Iniciar sesión'}</h2>
+              <p class="hint" style="margin-bottom:10px;">${t === 'registro' ? 'Regístrate como estudiante para practicar y guardar tu progreso.' : (isAdminRole ? 'Ingresa con el correo y la contraseña del administrador.' : 'Ingresa con la cuenta que creaste.')}</p>
+              ${state.authError ? `<div class="error-box">${escapeHtml(state.authError)}</div>` : ''}
+              ${t === 'login' ? formLogin() : formRegistro()}
+              ${!isAdminRole ? `
+                <div class="authmode-switch">
+                  ${t === 'registro'
+                    ? `&iquest;Ya tienes cuenta? <button type="button" id="btn-switch-mode">Inicia sesión</button>`
+                    : `&iquest;No tienes cuenta? <button type="button" id="btn-switch-mode">Regístrate</button>`}
+                </div>
+              ` : ''}
+            `}
+          </div>
         </div>
       </div>
     `;
-    app().querySelectorAll('.auth-tabs button').forEach(btn => {
-      btn.onclick = () => { state.authTab = btn.dataset.tab; state.authError = ''; render(); };
+
+    app().querySelectorAll('.role-toggle button').forEach(btn => {
+      btn.onclick = () => { state.authRole = btn.dataset.role; render(); };
     });
-    if (t === 'login') {
-      el('form-login').onsubmit = onSubmitLogin;
-    } else {
-      el('form-registro').onsubmit = onSubmitRegistro;
+    const btnIrLogin = el('btn-ir-login');
+    if (btnIrLogin) btnIrLogin.onclick = () => { state.authTab = 'login'; render(); };
+    const btnSwitch = el('btn-switch-mode');
+    if (btnSwitch) btnSwitch.onclick = () => { state.authTab = t === 'registro' ? 'login' : 'registro'; state.authError = ''; render(); };
+
+    if (!blockedAdminRegister) {
+      if (t === 'login') {
+        el('form-login').onsubmit = onSubmitLogin;
+      } else {
+        el('form-registro').onsubmit = onSubmitRegistro;
+      }
     }
   }
 
@@ -217,11 +255,11 @@
     return `
       <form id="form-login" class="stack">
         <div class="field">
-          <label>Correo electronico</label>
+          <label>Correo electrónico</label>
           <input type="email" name="email" required autocomplete="username" />
         </div>
         <div class="field">
-          <label>Contrasena</label>
+          <label>Contraseña</label>
           <input type="password" name="password" required autocomplete="current-password" />
         </div>
         <button type="submit" class="btn btn-primary btn-block">Entrar</button>
@@ -241,13 +279,13 @@
           <input type="text" name="apellidos" required autocomplete="family-name" />
         </div>
         <div class="field">
-          <label>Correo electronico</label>
+          <label>Correo electrónico</label>
           <input type="email" name="email" required autocomplete="username" />
         </div>
         <div class="field">
-          <label>Contrasena</label>
+          <label>Contraseña</label>
           <input type="password" name="password" required minlength="6" autocomplete="new-password" />
-          <div class="hint">Minimo 6 caracteres.</div>
+          <div class="hint">Mínimo 6 caracteres.</div>
         </div>
         <button type="submit" class="btn btn-primary btn-block">Crear mi cuenta</button>
       </form>
