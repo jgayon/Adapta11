@@ -1,6 +1,6 @@
 /* Ruta Saber - hoja de estilos
-   Paleta: azul indigo profundo (identidad principal) + cobre calido (acento,
-   en reemplazo del amarillo). Colores semanticos (verde/ambar/rojo) se usan
+   Paleta: azul indigo profundo (identidad principal) + turquesa (acento,
+   en reemplazo del amarillo/cobre). Colores semanticos (verde/ambar/rojo) se usan
    unicamente para dificultad y estados de correcto/incorrecto. */
 
 :root {
@@ -15,9 +15,9 @@
   --primary-dark: #212a56;
   --primary-light: #4e5da0;
 
-  --accent: #c1592f;
-  --accent-dark: #9c451f;
-  --accent-light: #e4a583;
+  --accent: #0E9488;
+  --accent-dark: #0B7168;
+  --accent-light: #6FCFC3;
 
   --success: #2f9e58;
   --success-bg: #e7f6ec;
@@ -39,6 +39,7 @@ html, body {
   background: var(--bg);
   color: var(--text);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-weight: 500;
   font-size: 15px;
   line-height: 1.5;
 }
