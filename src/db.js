@@ -170,7 +170,15 @@ async function migrateUsersRole() {
   const row = await get(`SELECT sql FROM sqlite_master WHERE type='table' AND name='users'`);
   if (!row || !row.sql || row.sql.includes('profesor')) return;
   console.log('[db] Migracion aplicada: users.role (+profesor) y users.colegio_id');
+  // questions.created_by y exam_sessions.user_id tienen FOREIGN KEY hacia
+  // users(id); en Turso/libSQL (a diferencia de un archivo SQLite local) esa
+  // restriccion se aplica por defecto, asi que hay que desactivarla mientras
+  // se hace el DROP+RENAME (receta estandar de SQLite para reconstruir una
+  // tabla). "DROP TABLE IF EXISTS users_new" al inicio hace que la migracion
+  // se pueda reintentar sin problemas si un intento anterior quedo a medias.
   await execMultiple(`
+    PRAGMA foreign_keys=OFF;
+    DROP TABLE IF EXISTS users_new;
     CREATE TABLE users_new (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nombre TEXT NOT NULL,
@@ -186,6 +194,7 @@ async function migrateUsersRole() {
       SELECT id, nombre, apellidos, email, password_hash, role, created_at FROM users;
     DROP TABLE users;
     ALTER TABLE users_new RENAME TO users;
+    PRAGMA foreign_keys=ON;
   `);
 }
 
