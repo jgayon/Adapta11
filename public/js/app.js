@@ -359,8 +359,12 @@
   }
 
   function formRegistro() {
+    // Campo de busqueda con autocompletado (datalist nativo): el estudiante
+    // escribe y ve sugerencias de colegios ya existentes; si el suyo no
+    // aparece, puede escribir el nombre completo y el servidor lo crea
+    // automaticamente al registrarse (ver POST /auth/register).
     const opcionesColegio = state.colegiosDisponibles
-      .map(c => `<option value="${c.id}">${escapeHtml(c.nombre)}</option>`).join('');
+      .map(c => `<option value="${escapeHtml(c.nombre)}"></option>`).join('');
     return `
       <form id="form-registro" class="stack">
         <div class="field">
@@ -373,11 +377,12 @@
         </div>
         <div class="field">
           <label>Colegio</label>
-          <select name="colegio_id" required ${state.colegiosDisponibles.length ? '' : 'disabled'}>
-            <option value="">${!state.colegiosCargados ? 'Cargando colegios...' : (state.colegiosDisponibles.length ? 'Selecciona tu colegio' : 'Todavia no hay colegios registrados')}</option>
-            ${opcionesColegio}
-          </select>
-          ${state.colegiosCargados && !state.colegiosDisponibles.length ? '<div class="hint">Pide al administrador que cree tu colegio antes de registrarte.</div>' : ''}
+          <input
+            type="text" name="colegio" required autocomplete="off" list="lista-colegios"
+            placeholder="${!state.colegiosCargados ? 'Cargando colegios...' : 'Busca tu colegio...'}"
+          />
+          <datalist id="lista-colegios">${opcionesColegio}</datalist>
+          <div class="hint">Escribe para buscarlo. Si no aparece en la lista, escribe el nombre completo de tu colegio y se creará automáticamente.</div>
         </div>
         <div class="field">
           <label>Correo electrónico</label>
@@ -419,7 +424,7 @@
           apellidos: fd.get('apellidos'),
           email: fd.get('email'),
           password: fd.get('password'),
-          colegio_id: fd.get('colegio_id')
+          colegio: fd.get('colegio')
         }
       });
       state.user = data.user;

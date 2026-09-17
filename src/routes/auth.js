@@ -18,6 +18,25 @@ function validEmail(email) {
   return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// Busca un colegio por nombre (sin distinguir mayusculas/acentos de más) y,
+// si no existe, lo crea. Asi el estudiante puede escribir su colegio aunque
+// el administrador todavia no lo haya registrado, y dos estudiantes del
+// mismo colegio que escriban el nombre igual (ignorando mayusculas) quedan
+// en el mismo colegio en vez de crear uno duplicado por cada registro.
+async function obtenerOCrearColegio(nombre) {
+  const existente = await db.get('SELECT id FROM colegios WHERE LOWER(nombre) = LOWER(?)', [nombre]);
+  if (existente) return existente.id;
+  try {
+    const info = await db.run('INSERT INTO colegios (nombre) VALUES (?)', [nombre]);
+    return info.lastInsertRowid;
+  } catch (err) {
+    // Condicion de carrera: alguien registro el mismo colegio justo antes.
+    const otra = await db.get('SELECT id FROM colegios WHERE LOWER(nombre) = LOWER(?)', [nombre]);
+    if (otra) return otra.id;
+    throw err;
+  }
+}
+
 function publicUser(u) {
   return {
     id: u.id, nombre: u.nombre, apellidos: u.apellidos, email: u.email, role: u.role,
@@ -29,7 +48,7 @@ function publicUser(u) {
 // un colegio (obligatorio). No existe registro publico de administrador ni
 // de profesor (los profesores los crea el administrador, ver admin.js).
 router.post('/register', asyncHandler(async (req, res) => {
-  const { nombre, apellidos, email, password, colegio_id } = req.body || {};
+  const { nombre, apellidos, email, password, colegio } = req.body || {};
 
   if (!nombre || !nombre.trim()) {
     return res.status(400).json({ error: 'El nombre es obligatorio.' });
@@ -43,14 +62,14 @@ router.post('/register', asyncHandler(async (req, res) => {
   if (!password || password.length < 6) {
     return res.status(400).json({ error: 'La contrasena debe tener al menos 6 caracteres.' });
   }
-  const colegioIdNum = Number(colegio_id);
-  if (!colegioIdNum) {
-    return res.status(400).json({ error: 'Selecciona tu colegio.' });
+  const colegioNombre = colegio ? String(colegio).trim() : '';
+  if (!colegioNombre) {
+    return res.status(400).json({ error: 'Escribe o busca tu colegio.' });
   }
-  const colegio = await db.get('SELECT id FROM colegios WHERE id = ?', [colegioIdNum]);
-  if (!colegio) {
-    return res.status(400).json({ error: 'El colegio seleccionado no es valido.' });
+  if (colegioNombre.length > 150) {
+    return res.status(400).json({ error: 'El nombre del colegio es demasiado largo.' });
   }
+  const colegioIdNum = await obtenerOCrearColegio(colegioNombre);
 
   const existing = await db.get('SELECT id FROM users WHERE email = ?', [email.toLowerCase().trim()]);
   if (existing) {
