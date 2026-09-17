@@ -564,7 +564,8 @@ tr.clickable:hover { background: var(--surface-2); }
   border-radius: var(--radius-sm);
   padding: 0.7rem 0.9rem;
   cursor: pointer;
-  background: var(--surface);
+  background: var(--surface-2);
+  color: var(--text);
   text-align: left;
 }
 .opcion:hover { border-color: var(--primary-light); }
@@ -573,7 +574,8 @@ tr.clickable:hover { background: var(--surface-2); }
 .opcion.incorrecta { border-color: var(--danger); background: var(--danger-bg); }
 .opcion .letra {
   width: 26px; height: 26px; border-radius: 50%;
-  background: var(--surface-2);
+  background: var(--surface);
+  color: var(--text);
   border: 1.5px solid var(--border);
   display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 0.8rem; flex-shrink: 0;
