@@ -159,6 +159,7 @@ function initSchema() {
   return schemaReady
     .then(() => migrateUsersRole())
     .then(() => migrateColumns())
+    .then(() => fusionarColegiosDuplicados())
     .then(() => createExtraIndexes());
 }
 
@@ -222,6 +223,43 @@ async function migrateColumns() {
     if (!exists) {
       await run(ddl);
       console.log(`[db] Migracion aplicada: ${table}.${column}`);
+    }
+  }
+}
+
+// Repara datos existentes: antes de que la creacion manual de colegios (ver
+// routes/colegios.js) comparara nombres sin distinguir mayusculas, era
+// posible terminar con dos filas de "colegios" para el mismo colegio (por
+// ejemplo "Sagrada Familia" creada por el administrador y "sagrada familia"
+// creada automaticamente al registrarse un estudiante), cada una con
+// estudiantes/profesores distintos. Esta migracion agrupa los colegios que
+// solo difieren en mayusculas/minusculas, elige como canonico el que ya
+// tenga mas usuarios asociados (en empate, el de id mas antiguo), reasigna
+// a ese los usuarios de los demas y elimina las filas duplicadas. Es
+// idempotente: una vez fusionados no quedan duplicados, asi que en
+// despliegues siguientes no hace nada.
+async function fusionarColegiosDuplicados() {
+  const colegios = await all('SELECT id, nombre FROM colegios');
+  const grupos = new Map();
+  for (const c of colegios) {
+    const key = c.nombre.trim().toLowerCase();
+    if (!grupos.has(key)) grupos.set(key, []);
+    grupos.get(key).push(c);
+  }
+  for (const grupo of grupos.values()) {
+    if (grupo.length < 2) continue;
+    const conConteo = [];
+    for (const c of grupo) {
+      const row = await get('SELECT COUNT(*) as n FROM users WHERE colegio_id = ?', [c.id]);
+      conConteo.push({ ...c, n: row ? row.n : 0 });
+    }
+    conConteo.sort((a, b) => (b.n - a.n) || (a.id - b.id));
+    const canonico = conConteo[0];
+    const duplicados = conConteo.slice(1);
+    for (const dup of duplicados) {
+      await run('UPDATE users SET colegio_id = ? WHERE colegio_id = ?', [canonico.id, dup.id]);
+      await run('DELETE FROM colegios WHERE id = ?', [dup.id]);
+      console.log(`[db] Colegios fusionados: "${dup.nombre}" (id=${dup.id}) -> "${canonico.nombre}" (id=${canonico.id})`);
     }
   }
 }

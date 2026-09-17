@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { signToken, requireAuth } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
+const { obtenerOCrearColegio } = require('../lib/colegios');
 
 const router = express.Router();
 
@@ -16,25 +17,6 @@ const COOKIE_OPTS = {
 
 function validEmail(email) {
   return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-// Busca un colegio por nombre (sin distinguir mayusculas/acentos de más) y,
-// si no existe, lo crea. Asi el estudiante puede escribir su colegio aunque
-// el administrador todavia no lo haya registrado, y dos estudiantes del
-// mismo colegio que escriban el nombre igual (ignorando mayusculas) quedan
-// en el mismo colegio en vez de crear uno duplicado por cada registro.
-async function obtenerOCrearColegio(nombre) {
-  const existente = await db.get('SELECT id FROM colegios WHERE LOWER(nombre) = LOWER(?)', [nombre]);
-  if (existente) return existente.id;
-  try {
-    const info = await db.run('INSERT INTO colegios (nombre) VALUES (?)', [nombre]);
-    return info.lastInsertRowid;
-  } catch (err) {
-    // Condicion de carrera: alguien registro el mismo colegio justo antes.
-    const otra = await db.get('SELECT id FROM colegios WHERE LOWER(nombre) = LOWER(?)', [nombre]);
-    if (otra) return otra.id;
-    throw err;
-  }
 }
 
 function publicUser(u) {
