@@ -31,6 +31,7 @@ function validarPregunta(body) {
   const eje = materia && EJES_POR_MATERIA[materia].includes(body.eje) ? body.eje : null;
   const correcta = LETRAS.includes((body.respuesta_correcta || '').toLowerCase())
     ? body.respuesta_correcta.toLowerCase() : null;
+  const textoId = body.texto_id ? Number(body.texto_id) : null;
 
   if (!materia) errores.push('Selecciona una materia valida.');
   if (materia && !competencia) errores.push('Selecciona una competencia valida para esa materia.');
@@ -50,7 +51,11 @@ function validarPregunta(body) {
       dificultad,
       competencia,
       eje,
-      texto_base: body.texto_base ? String(body.texto_base).trim() : null,
+      // Si la pregunta pertenece a un texto compartido (texto_id), ese texto
+      // manda sobre texto_base (que queda para lecturas propias de una sola
+      // pregunta). Ver GET/POST /textos mas abajo.
+      texto_base: textoId ? null : (body.texto_base ? String(body.texto_base).trim() : null),
+      texto_id: textoId,
       enunciado: body.enunciado ? String(body.enunciado).trim() : '',
       opcion_a: String(body.opcion_a || '').trim(),
       opcion_b: String(body.opcion_b || '').trim(),
@@ -61,6 +66,73 @@ function validarPregunta(body) {
       imagen: body.imagen ? String(body.imagen) : null
     }
   };
+}
+
+// Baraja un arreglo sin mutar el original (Fisher-Yates).
+function barajar(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Si alguna de las preguntas ya elegidas al azar pertenece a un texto
+// compartido que tiene, en total, 5 preguntas activas o mas, se completa el
+// grupo con las que falten para que el estudiante siempre vea la lectura
+// completa junto con todas sus preguntas (nunca una lectura "a medias"). Los
+// textos con menos de 5 preguntas activas todavia no se muestran como grupo
+// (sus preguntas se comportan como sueltas) mientras el banco no alcance el
+// minimo pedido.
+async function completarGrupos(preguntas) {
+  const idsTexto = [...new Set(preguntas.filter((q) => q.texto_id).map((q) => q.texto_id))];
+  if (!idsTexto.length) return { preguntas, textos: [] };
+
+  const yaIncluidas = new Set(preguntas.map((q) => q.id));
+  const resultado = preguntas.slice();
+  const gruposValidos = [];
+  for (const textoId of idsTexto) {
+    const miembros = await db.all('SELECT * FROM questions WHERE texto_id = ? AND activo = 1', [textoId]);
+    if (miembros.length >= 5) {
+      gruposValidos.push(textoId);
+      for (const m of miembros) {
+        if (!yaIncluidas.has(m.id)) { resultado.push(m); yaIncluidas.add(m.id); }
+      }
+    }
+  }
+
+  let textos = [];
+  if (gruposValidos.length) {
+    const placeholders = gruposValidos.map(() => '?').join(',');
+    textos = await db.all(`SELECT id, contenido FROM textos WHERE id IN (${placeholders})`, gruposValidos);
+  }
+  return { preguntas: barajarConservandoGrupos(resultado), textos };
+}
+
+// Mezcla el orden de las preguntas sueltas/grupos entre si, pero mantiene
+// contiguas las preguntas de un mismo texto compartido (y en orden aleatorio
+// entre ellas), para poder mostrarlas juntas bajo un mismo encabezado.
+function barajarConservandoGrupos(preguntas) {
+  const porTexto = new Map();
+  const unidades = [];
+  for (const q of preguntas) {
+    if (q.texto_id) {
+      if (!porTexto.has(q.texto_id)) {
+        const unidad = { preguntas: [] };
+        porTexto.set(q.texto_id, unidad);
+        unidades.push(unidad);
+      }
+      porTexto.get(q.texto_id).preguntas.push(q);
+    } else {
+      unidades.push({ preguntas: [q] });
+    }
+  }
+  const salida = [];
+  for (const u of barajar(unidades)) {
+    salida.push(...barajar(u.preguntas));
+  }
+  return salida;
 }
 
 /* ---------- Rutas para estudiantes (deben ir antes de /:id) ---------- */
@@ -90,7 +162,8 @@ router.get('/practice', requireAuth, asyncHandler(async (req, res) => {
     `SELECT * FROM questions WHERE ${condiciones.join(' AND ')} ORDER BY RANDOM() LIMIT ?`,
     params
   );
-  res.json({ preguntas: rows });
+  const { preguntas, textos } = await completarGrupos(rows);
+  res.json({ preguntas, textos });
 }));
 
 // Conjunto de preguntas para el Simulacro. "materias" indica si el estudiante
@@ -115,24 +188,26 @@ router.get('/simulacro-pool', requireAuth, asyncHandler(async (req, res) => {
       preguntas.push(...rows);
     }
   }
-  res.json({ preguntas, materias });
+  const completo = await completarGrupos(preguntas);
+  res.json({ preguntas: completo.preguntas, materias, textos: completo.textos });
 }));
 
 /* ---------- Rutas de administrador ---------- */
 
 router.get('/', requireAdmin, asyncHandler(async (req, res) => {
   const { materia, competencia, eje } = req.query;
-  const condiciones = ['activo = 1'];
+  const condiciones = ['q.activo = 1'];
   const params = [];
-  if (MATERIAS.includes(materia)) { condiciones.push('materia = ?'); params.push(materia); }
+  if (MATERIAS.includes(materia)) { condiciones.push('q.materia = ?'); params.push(materia); }
   if (materia && COMPETENCIAS_POR_MATERIA[materia] && COMPETENCIAS_POR_MATERIA[materia].includes(competencia)) {
-    condiciones.push('competencia = ?'); params.push(competencia);
+    condiciones.push('q.competencia = ?'); params.push(competencia);
   }
   if (materia && EJES_POR_MATERIA[materia] && EJES_POR_MATERIA[materia].includes(eje)) {
-    condiciones.push('eje = ?'); params.push(eje);
+    condiciones.push('q.eje = ?'); params.push(eje);
   }
   const rows = await db.all(
-    `SELECT * FROM questions WHERE ${condiciones.join(' AND ')} ORDER BY id DESC`,
+    `SELECT q.*, t.contenido as texto_contenido FROM questions q LEFT JOIN textos t ON t.id = q.texto_id
+     WHERE ${condiciones.join(' AND ')} ORDER BY q.id DESC`,
     params
   );
   res.json({ preguntas: rows });
@@ -144,8 +219,40 @@ router.get('/taxonomia', requireAuth, asyncHandler(async (req, res) => {
   res.json({ competencias: COMPETENCIAS_POR_MATERIA, ejes: EJES_POR_MATERIA });
 }));
 
+// Textos compartidos (lecturas usadas por varias preguntas). Van antes de
+// /:id para que "/textos" no se interprete como un id de pregunta.
+router.get('/textos', requireAdmin, asyncHandler(async (req, res) => {
+  const { materia } = req.query;
+  const condiciones = [];
+  const params = [];
+  if (MATERIAS.includes(materia)) { condiciones.push('t.materia = ?'); params.push(materia); }
+  const where = condiciones.length ? 'WHERE ' + condiciones.join(' AND ') : '';
+  const textos = await db.all(`
+    SELECT t.id, t.materia, t.contenido, t.created_at,
+      (SELECT COUNT(*) FROM questions q WHERE q.texto_id = t.id AND q.activo = 1) as num_preguntas
+    FROM textos t ${where} ORDER BY t.created_at DESC
+  `, params);
+  res.json({ textos });
+}));
+
+router.post('/textos', requireAdmin, asyncHandler(async (req, res) => {
+  const materia = MATERIAS.includes(req.body && req.body.materia) ? req.body.materia : null;
+  const contenido = req.body && req.body.contenido ? String(req.body.contenido).trim() : '';
+  if (!materia) return res.status(400).json({ error: 'Selecciona una materia valida para el texto.' });
+  if (!contenido) return res.status(400).json({ error: 'El contenido del texto es obligatorio.' });
+  const info = await db.run(
+    'INSERT INTO textos (materia, contenido, created_by) VALUES (?, ?, ?)',
+    [materia, contenido, req.user.id]
+  );
+  const texto = await db.get('SELECT * FROM textos WHERE id = ?', [info.lastInsertRowid]);
+  res.status(201).json({ texto });
+}));
+
 router.get('/:id', requireAdmin, asyncHandler(async (req, res) => {
-  const pregunta = await db.get('SELECT * FROM questions WHERE id = ?', [req.params.id]);
+  const pregunta = await db.get(
+    `SELECT q.*, t.contenido as texto_contenido FROM questions q LEFT JOIN textos t ON t.id = q.texto_id WHERE q.id = ?`,
+    [req.params.id]
+  );
   if (!pregunta) return res.status(404).json({ error: 'Pregunta no encontrada.' });
   res.json({ pregunta });
 }));
@@ -153,13 +260,19 @@ router.get('/:id', requireAdmin, asyncHandler(async (req, res) => {
 router.post('/', requireAdmin, asyncHandler(async (req, res) => {
   const { errores, normalizado } = validarPregunta(req.body || {});
   if (errores.length) return res.status(400).json({ error: errores.join(' ') });
+  if (normalizado.texto_id) {
+    const texto = await db.get('SELECT * FROM textos WHERE id = ?', [normalizado.texto_id]);
+    if (!texto || texto.materia !== normalizado.materia) {
+      return res.status(400).json({ error: 'El texto compartido seleccionado no existe o no corresponde a la materia elegida.' });
+    }
+  }
 
   const info = await db.run(`
     INSERT INTO questions
-      (materia, dificultad, competencia, eje, texto_base, enunciado, opcion_a, opcion_b, opcion_c, opcion_d, respuesta_correcta, explicacion, imagen, activo, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      (materia, dificultad, competencia, eje, texto_base, texto_id, enunciado, opcion_a, opcion_b, opcion_c, opcion_d, respuesta_correcta, explicacion, imagen, activo, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
   `, [
-    normalizado.materia, normalizado.dificultad, normalizado.competencia, normalizado.eje, normalizado.texto_base, normalizado.enunciado,
+    normalizado.materia, normalizado.dificultad, normalizado.competencia, normalizado.eje, normalizado.texto_base, normalizado.texto_id, normalizado.enunciado,
     normalizado.opcion_a, normalizado.opcion_b, normalizado.opcion_c, normalizado.opcion_d,
     normalizado.respuesta_correcta, normalizado.explicacion, normalizado.imagen, req.user.id
   ]);
@@ -174,13 +287,19 @@ router.put('/:id', requireAdmin, asyncHandler(async (req, res) => {
 
   const { errores, normalizado } = validarPregunta(req.body || {});
   if (errores.length) return res.status(400).json({ error: errores.join(' ') });
+  if (normalizado.texto_id) {
+    const texto = await db.get('SELECT * FROM textos WHERE id = ?', [normalizado.texto_id]);
+    if (!texto || texto.materia !== normalizado.materia) {
+      return res.status(400).json({ error: 'El texto compartido seleccionado no existe o no corresponde a la materia elegida.' });
+    }
+  }
 
   await db.run(`
-    UPDATE questions SET materia=?, dificultad=?, competencia=?, eje=?, texto_base=?, enunciado=?, opcion_a=?, opcion_b=?,
+    UPDATE questions SET materia=?, dificultad=?, competencia=?, eje=?, texto_base=?, texto_id=?, enunciado=?, opcion_a=?, opcion_b=?,
       opcion_c=?, opcion_d=?, respuesta_correcta=?, explicacion=?, imagen=?
     WHERE id=?
   `, [
-    normalizado.materia, normalizado.dificultad, normalizado.competencia, normalizado.eje, normalizado.texto_base, normalizado.enunciado,
+    normalizado.materia, normalizado.dificultad, normalizado.competencia, normalizado.eje, normalizado.texto_base, normalizado.texto_id, normalizado.enunciado,
     normalizado.opcion_a, normalizado.opcion_b, normalizado.opcion_c, normalizado.opcion_d,
     normalizado.respuesta_correcta, normalizado.explicacion, normalizado.imagen, req.params.id
   ]);

@@ -19,13 +19,17 @@ function validEmail(email) {
 }
 
 function publicUser(u) {
-  return { id: u.id, nombre: u.nombre, apellidos: u.apellidos, email: u.email, role: u.role };
+  return {
+    id: u.id, nombre: u.nombre, apellidos: u.apellidos, email: u.email, role: u.role,
+    colegio_id: u.colegio_id || null
+  };
 }
 
-// Registro publico -> siempre crea una cuenta de tipo "estudiante".
-// No existe registro publico de administrador (ver seccion de seed / env vars).
+// Registro publico -> siempre crea una cuenta de tipo "estudiante", ligada a
+// un colegio (obligatorio). No existe registro publico de administrador ni
+// de profesor (los profesores los crea el administrador, ver admin.js).
 router.post('/register', asyncHandler(async (req, res) => {
-  const { nombre, apellidos, email, password } = req.body || {};
+  const { nombre, apellidos, email, password, colegio_id } = req.body || {};
 
   if (!nombre || !nombre.trim()) {
     return res.status(400).json({ error: 'El nombre es obligatorio.' });
@@ -39,6 +43,14 @@ router.post('/register', asyncHandler(async (req, res) => {
   if (!password || password.length < 6) {
     return res.status(400).json({ error: 'La contrasena debe tener al menos 6 caracteres.' });
   }
+  const colegioIdNum = Number(colegio_id);
+  if (!colegioIdNum) {
+    return res.status(400).json({ error: 'Selecciona tu colegio.' });
+  }
+  const colegio = await db.get('SELECT id FROM colegios WHERE id = ?', [colegioIdNum]);
+  if (!colegio) {
+    return res.status(400).json({ error: 'El colegio seleccionado no es valido.' });
+  }
 
   const existing = await db.get('SELECT id FROM users WHERE email = ?', [email.toLowerCase().trim()]);
   if (existing) {
@@ -47,8 +59,8 @@ router.post('/register', asyncHandler(async (req, res) => {
 
   const hash = bcrypt.hashSync(password, 10);
   const info = await db.run(
-    'INSERT INTO users (nombre, apellidos, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
-    [nombre.trim(), apellidos.trim(), email.toLowerCase().trim(), hash, 'estudiante']
+    'INSERT INTO users (nombre, apellidos, email, password_hash, role, colegio_id) VALUES (?, ?, ?, ?, ?, ?)',
+    [nombre.trim(), apellidos.trim(), email.toLowerCase().trim(), hash, 'estudiante', colegioIdNum]
   );
 
   const user = await db.get('SELECT * FROM users WHERE id = ?', [info.lastInsertRowid]);
@@ -57,6 +69,8 @@ router.post('/register', asyncHandler(async (req, res) => {
   res.json({ user: publicUser(user) });
 }));
 
+// Login unico para los tres tipos de cuenta: el rol lo determina el registro
+// en la base de datos, no lo que elija el usuario en el formulario.
 router.post('/login', asyncHandler(async (req, res) => {
   const { email, password } = req.body || {};
   if (!validEmail(email) || !password) {

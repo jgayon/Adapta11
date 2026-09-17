@@ -67,14 +67,31 @@ let schemaReady = null;
 function initSchema() {
   if (schemaReady) return schemaReady;
   schemaReady = execMultiple(`
+    CREATE TABLE IF NOT EXISTS colegios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nombre TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nombre TEXT NOT NULL,
       apellidos TEXT NOT NULL DEFAULT '',
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('estudiante','administrador')) DEFAULT 'estudiante',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      role TEXT NOT NULL CHECK(role IN ('estudiante','profesor','administrador')) DEFAULT 'estudiante',
+      colegio_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY(colegio_id) REFERENCES colegios(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS textos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      materia TEXT NOT NULL CHECK(materia IN ('lectura_critica','matematicas')),
+      contenido TEXT NOT NULL,
+      created_by INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY(created_by) REFERENCES users(id)
     );
 
     CREATE TABLE IF NOT EXISTS questions (
@@ -84,6 +101,7 @@ function initSchema() {
       competencia TEXT,
       eje TEXT,
       texto_base TEXT,
+      texto_id INTEGER,
       enunciado TEXT NOT NULL,
       opcion_a TEXT NOT NULL,
       opcion_b TEXT NOT NULL,
@@ -95,7 +113,8 @@ function initSchema() {
       activo INTEGER NOT NULL DEFAULT 1,
       created_by INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(created_by) REFERENCES users(id)
+      FOREIGN KEY(created_by) REFERENCES users(id),
+      FOREIGN KEY(texto_id) REFERENCES textos(id)
     );
 
     CREATE TABLE IF NOT EXISTS exam_sessions (
@@ -137,7 +156,37 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON exam_sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_answers_session ON exam_answers(session_id);
   `);
-  return schemaReady.then(() => migrateColumns()).then(() => createExtraIndexes());
+  return schemaReady
+    .then(() => migrateUsersRole())
+    .then(() => migrateColumns())
+    .then(() => createExtraIndexes());
+}
+
+// Migracion de reconstruccion de tabla: SQLite no permite alterar un CHECK ya
+// existente, asi que para agregar el rol "profesor" (administrador de
+// colegio) hay que recrear la tabla users. Es idempotente: solo corre si la
+// definicion actual de la tabla todavia no incluye 'profesor'.
+async function migrateUsersRole() {
+  const row = await get(`SELECT sql FROM sqlite_master WHERE type='table' AND name='users'`);
+  if (!row || !row.sql || row.sql.includes('profesor')) return;
+  console.log('[db] Migracion aplicada: users.role (+profesor) y users.colegio_id');
+  await execMultiple(`
+    CREATE TABLE users_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nombre TEXT NOT NULL,
+      apellidos TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('estudiante','profesor','administrador')) DEFAULT 'estudiante',
+      colegio_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY(colegio_id) REFERENCES colegios(id)
+    );
+    INSERT INTO users_new (id, nombre, apellidos, email, password_hash, role, created_at)
+      SELECT id, nombre, apellidos, email, password_hash, role, created_at FROM users;
+    DROP TABLE users;
+    ALTER TABLE users_new RENAME TO users;
+  `);
 }
 
 // Migracion ligera e idempotente: agrega columnas nuevas a bases de datos que
@@ -154,7 +203,9 @@ async function migrateColumns() {
     { table: 'exam_answers', column: 'tiempo_segundos', ddl: 'ALTER TABLE exam_answers ADD COLUMN tiempo_segundos INTEGER NOT NULL DEFAULT 0' },
     { table: 'exam_sessions', column: 'competencia', ddl: 'ALTER TABLE exam_sessions ADD COLUMN competencia TEXT' },
     { table: 'exam_sessions', column: 'eje', ddl: 'ALTER TABLE exam_sessions ADD COLUMN eje TEXT' },
-    { table: 'exam_sessions', column: 'materias', ddl: 'ALTER TABLE exam_sessions ADD COLUMN materias TEXT' }
+    { table: 'exam_sessions', column: 'materias', ddl: 'ALTER TABLE exam_sessions ADD COLUMN materias TEXT' },
+    { table: 'questions', column: 'texto_id', ddl: 'ALTER TABLE questions ADD COLUMN texto_id INTEGER REFERENCES textos(id)' },
+    { table: 'users', column: 'colegio_id', ddl: 'ALTER TABLE users ADD COLUMN colegio_id INTEGER REFERENCES colegios(id)' }
   ];
   for (const { table, column, ddl } of migrations) {
     const cols = await all(`PRAGMA table_info(${table})`);
@@ -169,6 +220,8 @@ async function migrateColumns() {
 async function createExtraIndexes() {
   await run('CREATE INDEX IF NOT EXISTS idx_questions_materia_competencia ON questions(materia, competencia, activo)');
   await run('CREATE INDEX IF NOT EXISTS idx_questions_materia_eje ON questions(materia, eje, activo)');
+  await run('CREATE INDEX IF NOT EXISTS idx_questions_texto ON questions(texto_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_users_colegio ON users(colegio_id)');
 }
 
 module.exports = { run, get, all, batch, execMultiple, initSchema, client };

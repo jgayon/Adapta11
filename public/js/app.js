@@ -15,14 +15,15 @@
 
   const state = {
     user: null,
-    view: 'cargando', // cargando | auth | admin | estudiante
+    view: 'cargando', // cargando | auth | admin | profesor | estudiante
     authTab: 'login',
-    authRole: 'estudiante', // 'estudiante' | 'administrador' -- solo cambia el texto de ayuda del login
     authError: '',
+    colegiosDisponibles: [], // para el select de colegio en el registro
 
     admin: {
-      tab: 'preguntas',
+      tab: 'preguntas', // preguntas | estudiantes | colegios
       preguntas: [],
+      textos: [],
       filtroMateria: '',
       filtroCompetencia: '',
       filtroEje: '',
@@ -31,6 +32,19 @@
       estudiantes: [],
       estudianteSeleccionado: null,
       detalle: null, // { tipo: 'practica'|'simulacro'|'global', datos }
+      colegios: [],
+      profesores: [],
+      colegioError: '',
+      profesorError: '',
+    },
+
+    profesor: {
+      tab: 'resumen', // resumen | estudiantes
+      resumen: null,
+      comparativa: [],
+      estudiantes: [],
+      estudianteSeleccionado: null,
+      detalle: null,
     },
 
     estudiante: {
@@ -43,7 +57,6 @@
   };
 
   const MATERIA_LABEL = { lectura_critica: 'Lectura Critica', matematicas: 'Matematicas' };
-  const DIFICULTAD_LABEL = { facil: 'Facil', media: 'Media', dificil: 'Dificil' };
   const LETRAS = ['a', 'b', 'c', 'd'];
 
   // Clasificacion oficial del Icfes (Marcos de referencia Saber 11): se usa
@@ -89,7 +102,6 @@
   }
 
   function materiaLabel(m) { return MATERIA_LABEL[m] || m || '-'; }
-  function dificultadLabel(d) { return DIFICULTAD_LABEL[d] || d || '-'; }
   function competenciaLabel(c) { return COMPETENCIA_LABEL[c] || c || '-'; }
   function ejeLabel(j) { return EJE_LABEL[j] || j || '-'; }
 
@@ -97,8 +109,19 @@
   // derecha" cuando tiene imagen o un texto_base largo (lectura extensa),
   // para que ambos queden visibles sin tener que hacer scroll entre ellos.
   function esLayoutDividido(p) {
-    return !!(p && (p.imagen || (p.texto_base && p.texto_base.length > 220)));
+    return !!(p && (p.imagen || (p.texto_base && p.texto_base.length > 220) || (p.texto_contenido && p.texto_contenido.length > 220)));
   }
+
+  // Devuelve el texto de lectura que corresponde a una pregunta: si
+  // pertenece a un texto compartido (texto_id) usa el contenido de ese
+  // texto (buscado en el mapa que llega junto con la tanda de preguntas);
+  // si no, usa su propio texto_base (lectura individual, como antes).
+  function textoDe(q, textosMap) {
+    if (q && q.texto_id && textosMap && textosMap.has(q.texto_id)) return textosMap.get(q.texto_id);
+    return (q && (q.texto_contenido || q.texto_base)) || null;
+  }
+
+  const ROLE_LABEL = { administrador: 'Administrador', profesor: 'Administrador de colegio', estudiante: 'Estudiante' };
 
   function formatTiempo(segundos) {
     segundos = Math.max(0, Math.round(Number(segundos) || 0));
@@ -212,6 +235,10 @@
       state.view = 'admin';
       loadAdminPreguntas();
       loadAdminEstudiantes();
+    } else if (state.user.role === 'profesor') {
+      state.view = 'profesor';
+      state.profesor.tab = 'resumen';
+      loadProfesorResumen();
     } else {
       state.view = 'estudiante';
       state.estudiante.pantalla = 'inicio';
@@ -238,6 +265,8 @@
       renderAuth();
     } else if (state.view === 'admin') {
       renderAdmin();
+    } else if (state.view === 'profesor') {
+      renderProfesor();
     } else if (state.view === 'estudiante') {
       renderEstudiante();
     }
@@ -246,8 +275,9 @@
   function renderTopnav() {
     if (!state.user) { topnav().innerHTML = ''; return; }
     const nombreCompleto = escapeHtml(state.user.nombre + ' ' + (state.user.apellidos || ''));
+    const rol = ROLE_LABEL[state.user.role] || state.user.role;
     topnav().innerHTML = `
-      <span class="user-chip">${nombreCompleto}${state.user.role === 'administrador' ? ' &middot; Administrador' : ''}</span>
+      <span class="user-chip">${nombreCompleto} &middot; ${escapeHtml(rol)}</span>
       <button id="btn-logout">Cerrar sesion</button>
     `;
     el('btn-logout').onclick = logout;
@@ -259,8 +289,6 @@
 
   function renderAuth() {
     const t = state.authTab;
-    const isAdminRole = state.authRole === 'administrador';
-    const blockedAdminRegister = t === 'registro' && isAdminRole;
 
     app().innerHTML = `
       <div class="auth-shell">
@@ -269,57 +297,42 @@
             <div class="visual-brand"><span>Ruta</span><span class="vb-saber">Saber</span><span class="dot"></span></div>
             <h1>Práctica para el <em>Saber 11</em>,<br>a tu propio ritmo.</h1>
             <p class="sub">Práctica guiada para Lectura Crítica y Matemáticas, con tu progreso guardado en el servidor.</p>
-            <div class="diff-legend">
-              <span><i class="dotc" style="background:var(--success)"></i>Fácil</span>
-              <span><i class="dotc" style="background:var(--accent)"></i>Media</span>
-              <span><i class="dotc" style="background:#5B8DEF"></i>Difícil</span>
-            </div>
           </div>
           <p class="visual-foot">Ruta Saber &middot; examen Saber 11</p>
         </div>
         <div class="auth-form-wrap">
           <div class="auth-card card">
-            <div class="role-toggle">
-              <button type="button" data-role="estudiante" class="${!isAdminRole ? 'active' : ''}">Estudiante</button>
-              <button type="button" data-role="administrador" class="${isAdminRole ? 'active' : ''}">Administrador</button>
+            <h2 class="mb-0" style="font-size:1.4rem; margin-bottom:4px;">${t === 'registro' ? 'Crear cuenta' : 'Iniciar sesión'}</h2>
+            <p class="hint" style="margin-bottom:10px;">${t === 'registro' ? 'Regístrate como estudiante para practicar y guardar tu progreso.' : 'Ingresa con el correo y la contraseña de tu cuenta (estudiante, profesor o administrador).'}</p>
+            ${state.authError ? `<div class="error-box">${escapeHtml(state.authError)}</div>` : ''}
+            ${t === 'login' ? formLogin() : formRegistro()}
+            <div class="authmode-switch">
+              ${t === 'registro'
+                ? `&iquest;Ya tienes cuenta? <button type="button" id="btn-switch-mode">Inicia sesión</button>`
+                : `&iquest;No tienes cuenta? <button type="button" id="btn-switch-mode">Regístrate</button>`}
             </div>
-            ${blockedAdminRegister ? `
-              <h2 class="mb-0" style="font-size:1.4rem; margin-bottom:4px;">Cuenta de administrador</h2>
-              <p class="hint" style="margin-bottom:14px;">Este sistema no permite crear cuentas de administrador desde el registro: ya existe una única cuenta. Si eres administrador, inicia sesión con tus credenciales.</p>
-              <button type="button" class="btn btn-primary btn-block" id="btn-ir-login">Ir a iniciar sesión</button>
-            ` : `
-              <h2 class="mb-0" style="font-size:1.4rem; margin-bottom:4px;">${t === 'registro' ? 'Crear cuenta' : 'Iniciar sesión'}</h2>
-              <p class="hint" style="margin-bottom:10px;">${t === 'registro' ? 'Regístrate como estudiante para practicar y guardar tu progreso.' : (isAdminRole ? 'Ingresa con el correo y la contraseña del administrador.' : 'Ingresa con la cuenta que creaste.')}</p>
-              ${state.authError ? `<div class="error-box">${escapeHtml(state.authError)}</div>` : ''}
-              ${t === 'login' ? formLogin() : formRegistro()}
-              ${!isAdminRole ? `
-                <div class="authmode-switch">
-                  ${t === 'registro'
-                    ? `&iquest;Ya tienes cuenta? <button type="button" id="btn-switch-mode">Inicia sesión</button>`
-                    : `&iquest;No tienes cuenta? <button type="button" id="btn-switch-mode">Regístrate</button>`}
-                </div>
-              ` : ''}
-            `}
           </div>
         </div>
       </div>
     `;
 
-    app().querySelectorAll('.role-toggle button').forEach(btn => {
-      btn.onclick = () => { state.authRole = btn.dataset.role; render(); };
-    });
-    const btnIrLogin = el('btn-ir-login');
-    if (btnIrLogin) btnIrLogin.onclick = () => { state.authTab = 'login'; render(); };
     const btnSwitch = el('btn-switch-mode');
     if (btnSwitch) btnSwitch.onclick = () => { state.authTab = t === 'registro' ? 'login' : 'registro'; state.authError = ''; render(); };
 
-    if (!blockedAdminRegister) {
-      if (t === 'login') {
-        el('form-login').onsubmit = onSubmitLogin;
-      } else {
-        el('form-registro').onsubmit = onSubmitRegistro;
-      }
+    if (t === 'login') {
+      el('form-login').onsubmit = onSubmitLogin;
+    } else {
+      if (!state.colegiosDisponibles.length) loadColegiosPublicos();
+      el('form-registro').onsubmit = onSubmitRegistro;
     }
+  }
+
+  async function loadColegiosPublicos() {
+    try {
+      const data = await api('/colegios');
+      state.colegiosDisponibles = data.colegios;
+    } catch (e) { /* si falla, el select queda vacio y se avisa al enviar */ }
+    if (state.view === 'auth' && state.authTab === 'registro') render();
   }
 
   function formLogin() {
@@ -339,6 +352,8 @@
   }
 
   function formRegistro() {
+    const opcionesColegio = state.colegiosDisponibles
+      .map(c => `<option value="${c.id}">${escapeHtml(c.nombre)}</option>`).join('');
     return `
       <form id="form-registro" class="stack">
         <div class="field">
@@ -348,6 +363,14 @@
         <div class="field">
           <label>Apellidos</label>
           <input type="text" name="apellidos" required autocomplete="family-name" />
+        </div>
+        <div class="field">
+          <label>Colegio</label>
+          <select name="colegio_id" required ${state.colegiosDisponibles.length ? '' : 'disabled'}>
+            <option value="">${state.colegiosDisponibles.length ? 'Selecciona tu colegio' : 'Cargando colegios...'}</option>
+            ${opcionesColegio}
+          </select>
+          ${!state.colegiosDisponibles.length ? '<div class="hint">Si la lista no carga, todavia no hay colegios registrados: pide al administrador que cree el tuyo.</div>' : ''}
         </div>
         <div class="field">
           <label>Correo electrónico</label>
@@ -388,7 +411,8 @@
           nombre: fd.get('nombre'),
           apellidos: fd.get('apellidos'),
           email: fd.get('email'),
-          password: fd.get('password')
+          password: fd.get('password'),
+          colegio_id: fd.get('colegio_id')
         }
       });
       state.user = data.user;
@@ -419,6 +443,16 @@
     render();
   }
 
+  async function loadAdminColegios() {
+    const [colegiosData, profesoresData] = await Promise.all([
+      api('/colegios/detalle'),
+      api('/admin/profesores')
+    ]);
+    state.admin.colegios = colegiosData.colegios;
+    state.admin.profesores = profesoresData.profesores;
+    render();
+  }
+
   function renderAdmin() {
     const a = state.admin;
     app().innerHTML = `
@@ -428,6 +462,7 @@
       <div class="topnav" style="margin-bottom:1.25rem; gap:0.5rem;">
         <button id="tab-preguntas" class="btn ${a.tab === 'preguntas' ? 'btn-secondary' : 'btn-outline'}">Banco de preguntas</button>
         <button id="tab-estudiantes" class="btn ${a.tab === 'estudiantes' ? 'btn-secondary' : 'btn-outline'}">Estudiantes</button>
+        <button id="tab-colegios" class="btn ${a.tab === 'colegios' ? 'btn-secondary' : 'btn-outline'}">Colegios y profesores</button>
       </div>
       <div id="admin-content"></div>
     `;
@@ -435,10 +470,121 @@
     el('tab-estudiantes').onclick = () => {
       a.tab = 'estudiantes'; a.estudianteSeleccionado = null; a.detalle = null; render();
     };
+    el('tab-colegios').onclick = () => { a.tab = 'colegios'; loadAdminColegios(); render(); };
 
-    if (a.tab === 'preguntas') renderAdminPreguntas(); else renderAdminEstudiantes();
+    if (a.tab === 'preguntas') renderAdminPreguntas();
+    else if (a.tab === 'estudiantes') renderAdminEstudiantes();
+    else renderAdminColegios();
 
     if (a.modal) renderModalPregunta();
+  }
+
+  /* ---------- Admin: colegios y profesores ---------- */
+
+  function renderAdminColegios() {
+    const a = state.admin;
+    const filasColegios = a.colegios.map(c => `
+      <tr>
+        <td>${escapeHtml(c.nombre)}</td>
+        <td>${c.num_estudiantes}</td>
+        <td>${c.num_profesores}</td>
+      </tr>
+    `).join('');
+    const opcionesColegio = a.colegios.map(c => `<option value="${c.id}">${escapeHtml(c.nombre)}</option>`).join('');
+    const filasProfesores = a.profesores.map(p => `
+      <tr>
+        <td>${escapeHtml(p.nombre)} ${escapeHtml(p.apellidos)}</td>
+        <td>${escapeHtml(p.email)}</td>
+        <td>${escapeHtml(p.colegio_nombre || '-')}</td>
+      </tr>
+    `).join('');
+
+    el('admin-content').innerHTML = `
+      <div class="grid-2">
+        <div class="card">
+          <h3>Crear colegio</h3>
+          ${a.colegioError ? `<div class="error-box">${escapeHtml(a.colegioError)}</div>` : ''}
+          <form id="form-colegio" class="stack">
+            <div class="field">
+              <label>Nombre del colegio</label>
+              <input type="text" name="nombre" required />
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Crear colegio</button>
+          </form>
+        </div>
+        <div class="card">
+          <h3>Crear administrador de colegio (profesor)</h3>
+          ${a.profesorError ? `<div class="error-box">${escapeHtml(a.profesorError)}</div>` : ''}
+          ${!a.colegios.length ? '<p class="hint">Primero crea un colegio para poder asignarle un profesor.</p>' : `
+            <form id="form-profesor" class="stack">
+              <div class="field"><label>Nombre</label><input type="text" name="nombre" required /></div>
+              <div class="field"><label>Apellidos</label><input type="text" name="apellidos" required /></div>
+              <div class="field"><label>Colegio</label><select name="colegio_id" required>${opcionesColegio}</select></div>
+              <div class="field"><label>Correo electrónico</label><input type="email" name="email" required /></div>
+              <div class="field"><label>Contraseña</label><input type="password" name="password" required minlength="6" /></div>
+              <button type="submit" class="btn btn-primary btn-block">Crear profesor</button>
+            </form>
+          `}
+        </div>
+      </div>
+      <div class="card">
+        <h3>Colegios registrados</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Colegio</th><th>Estudiantes</th><th>Profesores</th></tr></thead>
+            <tbody>${filasColegios}</tbody>
+          </table>
+          ${!a.colegios.length ? '<div class="empty-state">Todavia no hay colegios registrados.</div>' : ''}
+        </div>
+      </div>
+      <div class="card">
+        <h3>Profesores (administradores de colegio)</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nombre</th><th>Correo</th><th>Colegio</th></tr></thead>
+            <tbody>${filasProfesores}</tbody>
+          </table>
+          ${!a.profesores.length ? '<div class="empty-state">Todavia no hay profesores creados.</div>' : ''}
+        </div>
+      </div>
+    `;
+
+    const formColegio = el('form-colegio');
+    if (formColegio) {
+      formColegio.onsubmit = async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        a.colegioError = '';
+        try {
+          await api('/colegios', { method: 'POST', body: { nombre: fd.get('nombre') } });
+          await loadAdminColegios();
+        } catch (err) {
+          a.colegioError = err.message;
+          render();
+        }
+      };
+    }
+    const formProfesor = el('form-profesor');
+    if (formProfesor) {
+      formProfesor.onsubmit = async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        a.profesorError = '';
+        try {
+          await api('/admin/profesores', {
+            method: 'POST',
+            body: {
+              nombre: fd.get('nombre'), apellidos: fd.get('apellidos'), email: fd.get('email'),
+              password: fd.get('password'), colegio_id: fd.get('colegio_id')
+            }
+          });
+          await loadAdminColegios();
+        } catch (err) {
+          a.profesorError = err.message;
+          render();
+        }
+      };
+    }
   }
 
   /* ---------- Admin: banco de preguntas ---------- */
@@ -452,7 +598,7 @@
         <td><span class="pill pill-competencia">${competenciaLabel(p.competencia)}</span></td>
         <td><span class="pill pill-eje">${ejeLabel(p.eje)}</span></td>
         <td style="white-space:normal; max-width:320px;">${escapeHtml(p.enunciado).slice(0, 110)}${p.enunciado.length > 110 ? '&hellip;' : ''}</td>
-        <td>${p.imagen ? '&#128247;' : ''}</td>
+        <td>${p.imagen ? '&#128247;' : ''}${p.texto_id ? ` <span class="pill pill-eje" title="Texto compartido #${p.texto_id}">Texto #${p.texto_id}</span>` : ''}</td>
         <td>
           <div class="row" style="gap:0.4rem;">
             <button class="btn btn-outline btn-sm" data-ver="${p.id}">Ver</button>
@@ -545,8 +691,10 @@
 
     if (soloLectura) {
       const dividido = esLayoutDividido(p);
-      const bloqueFuente = (p.texto_base || p.imagen) ? `
-          ${p.texto_base ? `<div class="texto-base">${escapeHtml(p.texto_base)}</div>` : ''}
+      const textoMostrado = p.texto_contenido || p.texto_base;
+      const bloqueFuente = (textoMostrado || p.imagen) ? `
+          ${p.texto_id ? `<div class="texto-grupo-aviso">Texto compartido #${p.texto_id} (usado por varias preguntas).</div>` : ''}
+          ${textoMostrado ? `<div class="texto-base">${escapeHtml(textoMostrado)}</div>` : ''}
           ${p.imagen ? `<img class="pregunta-img" src="${p.imagen}" alt="Imagen de la pregunta" />` : ''}
       ` : '';
       const bloquePregunta = `
@@ -618,7 +766,13 @@
           </div>
           <div class="field">
             <label>Texto base / lectura (opcional)</label>
-            <textarea name="texto_base" placeholder="Parrafo o contexto de lectura, si aplica">${escapeHtml(p.texto_base || '')}</textarea>
+            <textarea name="texto_base" id="input-texto-base" placeholder="Parrafo o contexto de lectura, si aplica" ${p.texto_id ? 'disabled' : ''}>${escapeHtml(p.texto_id ? '' : (p.texto_base || ''))}</textarea>
+          </div>
+          <div class="field">
+            <label>Texto compartido (opcional)</label>
+            <select id="input-texto-select"></select>
+            <input type="hidden" name="texto_id" id="input-texto-id" value="${p.texto_id || ''}" />
+            <div class="hint">Se usa cuando varias preguntas comparten la misma lectura (minimo 5 preguntas para que el estudiante las vea juntas bajo un mismo texto). Elige uno existente para agregarle esta pregunta, o crea uno nuevo a partir del texto base de arriba.</div>
           </div>
           <div class="field">
             <label>Enunciado de la pregunta</label>
@@ -670,7 +824,61 @@
         .map(j => `<option value="${j}" ${ejePrevia === j ? 'selected' : ''}>${ejeLabel(j)}</option>`).join('');
     }
     poblarTaxonomia(p.materia || 'matematicas', p.competencia, p.eje);
-    el('input-materia').onchange = (e) => poblarTaxonomia(e.target.value, null, null);
+
+    // El select de "texto compartido" se llena con los textos ya existentes
+    // de la materia elegida (para poder agregarle una pregunta mas a uno de
+    // ellos) mas la opcion de crear uno nuevo a partir del texto base.
+    async function poblarTextos(materiaActual, textoIdPrevio) {
+      const data = await api('/questions/textos?materia=' + materiaActual);
+      const opciones = data.textos.map(t => `
+        <option value="${t.id}" ${String(textoIdPrevio) === String(t.id) ? 'selected' : ''}>
+          #${t.id} (${t.num_preguntas} preg.) &middot; ${escapeHtml(t.contenido.slice(0, 60))}${t.contenido.length > 60 ? '&hellip;' : ''}
+        </option>
+      `).join('');
+      el('input-texto-select').innerHTML = `
+        <option value="">Ninguno (usar el texto base de arriba, solo para esta pregunta)</option>
+        ${opciones}
+        <option value="__nuevo__">+ Crear nuevo texto compartido a partir del texto base de arriba</option>
+      `;
+    }
+    poblarTextos(p.materia || 'matematicas', p.texto_id || '');
+
+    el('input-materia').onchange = (e) => {
+      poblarTaxonomia(e.target.value, null, null);
+      poblarTextos(e.target.value, '');
+      el('input-texto-id').value = '';
+      el('input-texto-base').disabled = false;
+    };
+
+    el('input-texto-select').onchange = async (e) => {
+      const valor = e.target.value;
+      if (valor === '__nuevo__') {
+        const contenido = el('input-texto-base').value.trim();
+        if (!contenido) {
+          alert('Escribe primero el contenido en "Texto base / lectura" para crear el texto compartido.');
+          e.target.value = el('input-texto-id').value || '';
+          return;
+        }
+        try {
+          const materiaActual = el('input-materia').value;
+          const data = await api('/questions/textos', { method: 'POST', body: { materia: materiaActual, contenido } });
+          el('input-texto-id').value = data.texto.id;
+          el('input-texto-base').value = '';
+          el('input-texto-base').disabled = true;
+          await poblarTextos(materiaActual, data.texto.id);
+        } catch (err) {
+          alert('No se pudo crear el texto compartido: ' + err.message);
+          e.target.value = '';
+        }
+      } else if (valor) {
+        el('input-texto-id').value = valor;
+        el('input-texto-base').value = '';
+        el('input-texto-base').disabled = true;
+      } else {
+        el('input-texto-id').value = '';
+        el('input-texto-base').disabled = false;
+      }
+    };
 
     const close = () => { backdrop.remove(); a.modal = null; render(); };
     el('modal-cerrar').onclick = close;
@@ -704,6 +912,7 @@
         competencia: fd.get('competencia'),
         eje: fd.get('eje'),
         texto_base: fd.get('texto_base'),
+        texto_id: fd.get('texto_id') || null,
         enunciado: fd.get('enunciado'),
         opcion_a: fd.get('opcion_a'),
         opcion_b: fd.get('opcion_b'),
@@ -833,10 +1042,17 @@
   }
 
   function pintarDetalleEstudiante() {
-    const a = state.admin;
     const cont = el('detalle-estudiante');
     if (!cont) return;
-    const { tipo, datos } = a.detalle;
+    pintarDetalleEstudianteEn(cont, state.admin.detalle);
+  }
+
+  // Presentacion compartida del detalle de un estudiante (sesiones de
+  // practica/simulacro o estadisticas globales), usada tanto por el panel
+  // de administrador como por el de profesor (mismo formato de datos,
+  // distinto contenedor y distinto origen de la peticion).
+  function pintarDetalleEstudianteEn(cont, detalleParam) {
+    const { tipo, datos } = detalleParam;
 
     if (tipo === 'practica' || tipo === 'simulacro') {
       const sesiones = datos.sesiones;
@@ -926,6 +1142,197 @@
         </div>
       </div>
     `;
+  }
+
+  /* ================================================================== */
+  /* VISTA: PROFESOR (administrador de colegio)                          */
+  /* ================================================================== */
+
+  async function loadProfesorResumen() {
+    const data = await api('/profesor/resumen');
+    state.profesor.resumen = data.resumen;
+    state.profesor.comparativa = data.comparativa;
+    render();
+  }
+
+  async function loadProfesorEstudiantes() {
+    const data = await api('/profesor/students');
+    state.profesor.estudiantes = data.estudiantes;
+    render();
+  }
+
+  function renderProfesor() {
+    const p = state.profesor;
+    app().innerHTML = `
+      <div class="row" style="margin-bottom:1.25rem;">
+        <h1 class="mb-0" style="flex:1;">Panel de tu colegio</h1>
+      </div>
+      <div class="topnav" style="margin-bottom:1.25rem; gap:0.5rem;">
+        <button id="tab-resumen" class="btn ${p.tab === 'resumen' ? 'btn-secondary' : 'btn-outline'}">Resumen y comparativas</button>
+        <button id="tab-pf-estudiantes" class="btn ${p.tab === 'estudiantes' ? 'btn-secondary' : 'btn-outline'}">Estudiantes</button>
+      </div>
+      <div id="profesor-content"></div>
+    `;
+    el('tab-resumen').onclick = () => { p.tab = 'resumen'; loadProfesorResumen(); render(); };
+    el('tab-pf-estudiantes').onclick = () => {
+      p.tab = 'estudiantes'; p.estudianteSeleccionado = null; p.detalle = null; loadProfesorEstudiantes(); render();
+    };
+    if (p.tab === 'resumen') renderProfesorResumen(); else renderProfesorEstudiantes();
+  }
+
+  function renderProfesorResumen() {
+    const p = state.profesor;
+    const r = p.resumen;
+    if (!r) {
+      el('profesor-content').innerHTML = `<div class="card"><p class="text-muted mb-0">Todavia no hay estudiantes registrados en tu colegio, asi que no hay estadisticas para mostrar.</p></div>`;
+      return;
+    }
+    const barrasMateria = r.por_materia.map(m => barraConValor(materiaLabel(m.materia), m.correctas, m.total, m.porcentaje)).join('');
+    const barrasCompetencia = (r.por_competencia || []).map(c => barraConValor(competenciaLabel(c.competencia), c.correctas, c.total, c.porcentaje)).join('');
+    const barrasEje = (r.por_eje || []).map(e => barraConValor(ejeLabel(e.eje), e.correctas, e.total, e.porcentaje)).join('');
+
+    const filasComparativa = p.comparativa.map((c, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(c.nombre)} ${escapeHtml(c.apellidos)}</td>
+        <td>${c.num_sesiones}</td>
+        <td>${c.num_preguntas}</td>
+        <td>${c.porcentaje_aciertos}%</td>
+      </tr>
+    `).join('');
+
+    el('profesor-content').innerHTML = `
+      <div class="card">
+        <h3>Resumen del colegio</h3>
+        <div class="row" style="gap:1.5rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
+          ${donutSvg(r.porcentaje_aciertos, '--accent')}
+          <div class="grid-3" style="flex:1; min-width:220px;">
+            <div class="stat-card"><div class="stat-value">${r.total_estudiantes}</div><div class="stat-label">Estudiantes</div></div>
+            <div class="stat-card"><div class="stat-value">${r.num_preguntas}</div><div class="stat-label">Preguntas respondidas</div></div>
+            <div class="stat-card"><div class="stat-value">${r.porcentaje_aciertos}%</div><div class="stat-label">Aciertos</div></div>
+          </div>
+        </div>
+        <h4>Desglose por materia</h4>
+        ${barrasMateria || '<p class="text-muted">Sin datos todavia.</p>'}
+        ${barrasCompetencia ? `<h4 style="margin-top:1.25rem;">Desglose por competencia</h4>${barrasCompetencia}` : ''}
+        ${barrasEje ? `<h4 style="margin-top:1.25rem;">Desglose por eje tematico</h4>${barrasEje}` : ''}
+      </div>
+      <div class="card">
+        <h3>Comparativa entre estudiantes</h3>
+        <p class="hint">Ordenada de mayor a menor porcentaje de aciertos.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Estudiante</th><th>Sesiones</th><th>Preguntas resp.</th><th>% Aciertos</th></tr></thead>
+            <tbody>${filasComparativa}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderProfesorEstudiantes() {
+    const p = state.profesor;
+    if (p.estudianteSeleccionado) { renderProfesorDetalleEstudiante(); return; }
+
+    const filas = p.estudiantes.map(u => `
+      <tr class="clickable" data-id="${u.id}">
+        <td>${escapeHtml(u.nombre)} ${escapeHtml(u.apellidos)}</td>
+        <td>${escapeHtml(u.email)}</td>
+        <td>${u.num_sesiones}</td>
+        <td>${u.num_preguntas}</td>
+        <td>${u.porcentaje_aciertos}%</td>
+        <td>${u.ultima_actividad ? formatFechaHora(u.ultima_actividad).fecha : '-'}</td>
+      </tr>
+    `).join('');
+
+    el('profesor-content').innerHTML = `
+      <div class="card">
+        <h2>Estudiantes de tu colegio</h2>
+        <p class="text-muted">Selecciona un estudiante para ver su practica, su simulacro o sus estadisticas globales.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nombre</th><th>Correo</th><th>Sesiones</th><th>Preguntas resp.</th><th>% Aciertos</th><th>Ultima actividad</th></tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+          ${!p.estudiantes.length ? '<div class="empty-state">Todavia no se ha registrado ningun estudiante en tu colegio.</div>' : ''}
+        </div>
+      </div>
+    `;
+    app().querySelectorAll('tr[data-id]').forEach(tr => {
+      tr.onclick = () => {
+        const u = p.estudiantes.find(x => String(x.id) === tr.dataset.id);
+        p.estudianteSeleccionado = u;
+        p.detalle = null;
+        render();
+      };
+    });
+  }
+
+  function renderProfesorDetalleEstudiante() {
+    const p = state.profesor;
+    const u = p.estudianteSeleccionado;
+
+    let cuerpo = '<div class="grid-3">' +
+      seccionBotonPf('practica', 'Practica', 'Sesiones de practica por materia, competencia y eje tematico.') +
+      seccionBotonPf('simulacro', 'Simulacro', 'Simulacros completos tipo examen.') +
+      seccionBotonPf('global', 'Estadisticas globales', 'Resumen general y desglose por materia.') +
+      '</div>';
+
+    el('profesor-content').innerHTML = `
+      <div class="row" style="margin-bottom:1rem;">
+        <button class="btn btn-outline btn-sm" id="btn-volver-lista-pf">&larr; Volver a estudiantes</button>
+      </div>
+      <div class="card">
+        <div class="eyebrow">Estudiante</div>
+        <h2>${escapeHtml(u.nombre)} ${escapeHtml(u.apellidos)}</h2>
+        <p class="text-muted mb-0">${escapeHtml(u.email)}</p>
+      </div>
+      <div class="card">
+        <h3>¿Que deseas ver?</h3>
+        ${cuerpo}
+      </div>
+      <div id="detalle-estudiante-pf"></div>
+    `;
+
+    function seccionBotonPf(tipo, titulo, desc) {
+      const activo = p.detalle && p.detalle.tipo === tipo;
+      return `
+        <button class="mode-card" data-tipo="${tipo}" style="${activo ? 'border-color:var(--accent);' : ''}">
+          <div class="mode-icon">${titulo[0]}</div>
+          <h3 class="mb-0">${titulo}</h3>
+          <p class="text-muted mb-0">${desc}</p>
+        </button>
+      `;
+    }
+
+    el('btn-volver-lista-pf').onclick = () => { p.estudianteSeleccionado = null; p.detalle = null; render(); };
+    app().querySelectorAll('.mode-card[data-tipo]').forEach(btn => {
+      btn.onclick = () => cargarDetalleEstudiantePf(btn.dataset.tipo);
+    });
+
+    if (p.detalle) pintarDetalleEstudiantePf();
+  }
+
+  async function cargarDetalleEstudiantePf(tipo) {
+    const p = state.profesor;
+    const id = p.estudianteSeleccionado.id;
+    if (tipo === 'global') {
+      const data = await api(`/profesor/students/${id}/summary`);
+      p.detalle = { tipo: 'global', datos: data };
+    } else {
+      const data = await api(`/profesor/students/${id}/sessions?tipo=${tipo}`);
+      p.detalle = { tipo, datos: data };
+    }
+    render();
+  }
+
+  // Reutiliza exactamente la misma presentacion que el detalle de
+  // estudiante del administrador (mismo formato de datos), apuntando al
+  // contenedor del panel de profesor.
+  function pintarDetalleEstudiantePf() {
+    const cont = el('detalle-estudiante-pf');
+    if (!cont) return;
+    pintarDetalleEstudianteEn(cont, state.profesor.detalle);
   }
 
   /* ================================================================== */
@@ -1025,6 +1432,7 @@
       state.estudiante.practica = {
         materia, competencia, eje,
         preguntas: data.preguntas,
+        textosMap: new Map((data.textos || []).map(t => [t.id, t.contenido])),
         idx: 0,
         respuestas: new Array(data.preguntas.length).fill(null),
         tiempoPorPregunta: new Array(data.preguntas.length).fill(0),
@@ -1057,9 +1465,12 @@
     const seleccion = pr.respuestas[pr.idx];
     const esUltima = pr.idx === pr.preguntas.length - 1;
 
-    const dividido = esLayoutDividido(q);
-    const bloqueFuente = (q.texto_base || q.imagen) ? `
-        ${q.texto_base ? `<div class="texto-base">${escapeHtml(q.texto_base)}</div>` : ''}
+    const textoCompartido = textoDe(q, pr.textosMap);
+    const dividido = !!(q.imagen || (textoCompartido && textoCompartido.length > 220));
+    const grupoTotal = q.texto_id ? pr.preguntas.filter(x => x.texto_id === q.texto_id).length : 0;
+    const bloqueFuente = (textoCompartido || q.imagen) ? `
+        ${grupoTotal >= 5 ? `<div class="texto-grupo-aviso">Responde las siguientes ${grupoTotal} preguntas con el texto presentado.</div>` : ''}
+        ${textoCompartido ? `<div class="texto-base">${escapeHtml(textoCompartido)}</div>` : ''}
         ${q.imagen ? `<img class="pregunta-img" src="${q.imagen}" alt="Imagen de la pregunta" />` : ''}
     ` : '';
     const bloquePregunta = `
@@ -1187,6 +1598,7 @@
       state.estudiante.simulacro = {
         materias,
         todas: data.preguntas,
+        textosMap: new Map((data.textos || []).map(t => [t.id, t.contenido])),
         byMateria,
         tab: materias[0],
         pos: { lectura_critica: 0, matematicas: 0 },
@@ -1255,7 +1667,9 @@
       </div>
 
       ${q ? (() => {
-        const dividido = esLayoutDividido(q);
+        const textoCompartido = textoDe(q, sm.textosMap);
+        const dividido = !!(q.imagen || (textoCompartido && textoCompartido.length > 220));
+        const grupoTotal = q.texto_id ? sm.todas.filter(x => x.texto_id === q.texto_id).length : 0;
         const pills = `
           <div class="row question-box-pills" style="gap:0.5rem; margin-bottom:0.75rem;">
             <span class="pill pill-materia">${materiaLabel(q.materia)}</span>
@@ -1263,8 +1677,9 @@
             <span class="pill pill-eje">${ejeLabel(q.eje)}</span>
           </div>
         `;
-        const bloqueFuente = (q.texto_base || q.imagen) ? `
-          ${q.texto_base ? `<div class="texto-base">${escapeHtml(q.texto_base)}</div>` : ''}
+        const bloqueFuente = (textoCompartido || q.imagen) ? `
+          ${grupoTotal >= 5 ? `<div class="texto-grupo-aviso">Responde las siguientes ${grupoTotal} preguntas con el texto presentado.</div>` : ''}
+          ${textoCompartido ? `<div class="texto-base">${escapeHtml(textoCompartido)}</div>` : ''}
           ${q.imagen ? `<img class="pregunta-img" src="${q.imagen}" alt="Imagen de la pregunta" />` : ''}
         ` : '';
         const bloquePregunta = `

@@ -1,16 +1,68 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { requireAdmin } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 
 const router = express.Router();
 
-// Lista de estudiantes con progreso agregado (no solo el numero de
-// estudiantes: nombre, correo y sus estadisticas).
-router.get('/students', requireAdmin, asyncHandler(async (req, res) => {
-  const estudiantes = await db.all(
-    `SELECT id, nombre, apellidos, email, created_at FROM users WHERE role = 'estudiante' ORDER BY nombre`
+function validEmail(email) {
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// El administrador de la plataforma crea las cuentas de administrador de
+// colegio (profesor): no existe registro publico para este rol.
+router.post('/profesores', requireAdmin, asyncHandler(async (req, res) => {
+  const { nombre, apellidos, email, password, colegio_id } = req.body || {};
+  if (!nombre || !nombre.trim()) return res.status(400).json({ error: 'El nombre es obligatorio.' });
+  if (!apellidos || !apellidos.trim()) return res.status(400).json({ error: 'Los apellidos son obligatorios.' });
+  if (!validEmail(email)) return res.status(400).json({ error: 'Correo electronico invalido.' });
+  if (!password || password.length < 6) return res.status(400).json({ error: 'La contrasena debe tener al menos 6 caracteres.' });
+  const colegioIdNum = Number(colegio_id);
+  if (!colegioIdNum) return res.status(400).json({ error: 'Selecciona el colegio que administrara este profesor.' });
+
+  const colegio = await db.get('SELECT id, nombre FROM colegios WHERE id = ?', [colegioIdNum]);
+  if (!colegio) return res.status(400).json({ error: 'El colegio seleccionado no existe.' });
+
+  const existing = await db.get('SELECT id FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+  if (existing) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
+
+  const hash = bcrypt.hashSync(password, 10);
+  const info = await db.run(
+    'INSERT INTO users (nombre, apellidos, email, password_hash, role, colegio_id) VALUES (?, ?, ?, ?, ?, ?)',
+    [nombre.trim(), apellidos.trim(), email.toLowerCase().trim(), hash, 'profesor', colegioIdNum]
   );
+  const profesor = await db.get(
+    'SELECT id, nombre, apellidos, email, colegio_id, created_at FROM users WHERE id = ?',
+    [info.lastInsertRowid]
+  );
+  res.status(201).json({ profesor: { ...profesor, colegio_nombre: colegio.nombre } });
+}));
+
+// Lista de profesores (administradores de colegio) ya creados, con el nombre
+// de su colegio, para el panel de administracion.
+router.get('/profesores', requireAdmin, asyncHandler(async (req, res) => {
+  const profesores = await db.all(`
+    SELECT u.id, u.nombre, u.apellidos, u.email, u.colegio_id, u.created_at, c.nombre as colegio_nombre
+    FROM users u LEFT JOIN colegios c ON c.id = u.colegio_id
+    WHERE u.role = 'profesor' ORDER BY u.nombre
+  `);
+  res.json({ profesores });
+}));
+
+// Lista de estudiantes con progreso agregado (no solo el numero de
+// estudiantes: nombre, correo y sus estadisticas). El administrador ve todos
+// los colegios; puede filtrar opcionalmente por uno solo con ?colegio_id=.
+router.get('/students', requireAdmin, asyncHandler(async (req, res) => {
+  const colegioId = Number(req.query.colegio_id) || null;
+  const estudiantes = colegioId
+    ? await db.all(
+      `SELECT id, nombre, apellidos, email, created_at FROM users WHERE role = 'estudiante' AND colegio_id = ? ORDER BY nombre`,
+      [colegioId]
+    )
+    : await db.all(
+      `SELECT id, nombre, apellidos, email, created_at FROM users WHERE role = 'estudiante' ORDER BY nombre`
+    );
   const rows = await db.all(`
     SELECT user_id,
            COUNT(*) as num_sesiones,

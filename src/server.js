@@ -9,6 +9,8 @@ const authRoutes = require('./routes/auth');
 const questionsRoutes = require('./routes/questions');
 const sessionsRoutes = require('./routes/sessions');
 const adminRoutes = require('./routes/admin');
+const colegiosRoutes = require('./routes/colegios');
+const profesorRoutes = require('./routes/profesor');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,6 +25,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/questions', questionsRoutes);
 app.use('/api/sessions', sessionsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/colegios', colegiosRoutes);
+app.use('/api/profesor', profesorRoutes);
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 
