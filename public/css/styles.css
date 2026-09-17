@@ -29,12 +29,14 @@
   --danger: #c0392b;
   --danger-bg: #fbeae8;
 
-  /* La barra superior siempre usa un azul marino oscuro fijo (no depende de
-     --primary, que en modo oscuro se aclara para servir de color de enlace):
-     asi el texto blanco de la barra mantiene buen contraste en ambos modos. */
-  --topbar-from: #1b3a6b;
-  --topbar-to: #0e213f;
-  --topbar-text: #ffffff;
+  /* La barra superior y el panel azul de la pantalla de inicio de sesion
+     siempre usan este mismo azul marino fijo, tanto en modo claro como en
+     modo oscuro (no depende de --primary, que en modo oscuro se aclara para
+     servir de color de enlace). No se redefine dentro de la media query de
+     modo oscuro a proposito: asi queda identico en los dos modos. */
+  --brand-navy-from: #1b3a6b;
+  --brand-navy-to: #0e213f;
+  --brand-navy-text: #ffffff;
 
   --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
   --font-body: 'Libre Franklin', system-ui, -apple-system, sans-serif;
@@ -70,10 +72,6 @@
     --warning-bg: #3a2f14;
     --danger: #e08787;
     --danger-bg: #3a1f1f;
-
-    --topbar-from: #0f1b30;
-    --topbar-to: #060d1a;
-    --topbar-text: #ffffff;
 
     --shadow: 0 1px 3px rgba(0,0,0,0.35), 0 10px 30px -14px rgba(0,0,0,0.6);
   }
@@ -114,8 +112,8 @@ a { color: var(--primary); }
 /* ---------- Topbar ---------- */
 
 .topbar {
-  background: linear-gradient(135deg, var(--topbar-from), var(--topbar-to));
-  color: var(--topbar-text);
+  background: linear-gradient(135deg, var(--brand-navy-from), var(--brand-navy-to));
+  color: var(--brand-navy-text);
   position: sticky;
   top: 0;
   z-index: 20;
@@ -336,7 +334,7 @@ textarea { min-height: 90px; resize: vertical; }
 }
 
 .auth-visual {
-  background: linear-gradient(160deg, var(--primary), var(--primary-dark));
+  background: linear-gradient(160deg, var(--brand-navy-from), var(--brand-navy-to));
   color: #f6f1dd;
   padding: 3rem 2.75rem;
   display: flex;

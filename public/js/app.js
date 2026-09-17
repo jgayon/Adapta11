@@ -19,6 +19,7 @@
     authTab: 'login',
     authError: '',
     colegiosDisponibles: [], // para el select de colegio en el registro
+    colegiosCargados: false, // evita volver a pedirlos en cada render si la lista esta vacia de verdad
 
     admin: {
       tab: 'preguntas', // preguntas | estudiantes | colegios
@@ -322,7 +323,12 @@
     if (t === 'login') {
       el('form-login').onsubmit = onSubmitLogin;
     } else {
-      if (!state.colegiosDisponibles.length) loadColegiosPublicos();
+      // Solo se piden una vez: si la lista llega vacia de verdad (todavia no
+      // hay colegios creados), "colegiosCargados" evita reintentar en cada
+      // render, que antes provocaba un ciclo de fetch+render infinito y
+      // dejaba el formulario inutilizable (se volvia a dibujar todo el
+      // tiempo, perdiendo el foco y lo que se hubiera escrito).
+      if (!state.colegiosCargados) loadColegiosPublicos();
       el('form-registro').onsubmit = onSubmitRegistro;
     }
   }
@@ -332,6 +338,7 @@
       const data = await api('/colegios');
       state.colegiosDisponibles = data.colegios;
     } catch (e) { /* si falla, el select queda vacio y se avisa al enviar */ }
+    state.colegiosCargados = true;
     if (state.view === 'auth' && state.authTab === 'registro') render();
   }
 
@@ -367,10 +374,10 @@
         <div class="field">
           <label>Colegio</label>
           <select name="colegio_id" required ${state.colegiosDisponibles.length ? '' : 'disabled'}>
-            <option value="">${state.colegiosDisponibles.length ? 'Selecciona tu colegio' : 'Cargando colegios...'}</option>
+            <option value="">${!state.colegiosCargados ? 'Cargando colegios...' : (state.colegiosDisponibles.length ? 'Selecciona tu colegio' : 'Todavia no hay colegios registrados')}</option>
             ${opcionesColegio}
           </select>
-          ${!state.colegiosDisponibles.length ? '<div class="hint">Si la lista no carga, todavia no hay colegios registrados: pide al administrador que cree el tuyo.</div>' : ''}
+          ${state.colegiosCargados && !state.colegiosDisponibles.length ? '<div class="hint">Pide al administrador que cree tu colegio antes de registrarte.</div>' : ''}
         </div>
         <div class="field">
           <label>Correo electrónico</label>
