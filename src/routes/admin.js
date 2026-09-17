@@ -82,11 +82,29 @@ router.get('/students/:id/summary', requireAdmin, asyncHandler(async (req, res) 
     WHERE session_id IN (SELECT id FROM exam_sessions WHERE user_id = ?)
     GROUP BY materia
   `, [req.params.id]);
+  const porCompetencia = await db.all(`
+    SELECT competencia, COUNT(*) as total, SUM(correcta) as correctas
+    FROM exam_answers
+    WHERE session_id IN (SELECT id FROM exam_sessions WHERE user_id = ?) AND competencia IS NOT NULL
+    GROUP BY competencia
+  `, [req.params.id]);
+  const porEje = await db.all(`
+    SELECT eje, COUNT(*) as total, SUM(correcta) as correctas
+    FROM exam_answers
+    WHERE session_id IN (SELECT id FROM exam_sessions WHERE user_id = ?) AND eje IS NOT NULL
+    GROUP BY eje
+  `, [req.params.id]);
 
   const totalPreg = sesiones.reduce((a, s) => a + (s.num_preguntas || 0), 0);
   const totalCorr = sesiones.reduce((a, s) => a + (s.num_correctas || 0), 0);
   const practicaCount = sesiones.filter(s => s.tipo === 'practica').length;
   const simulacroCount = sesiones.filter(s => s.tipo === 'simulacro').length;
+  const conDesglose = (rows, campo) => rows.map(r => ({
+    [campo]: r[campo],
+    total: r.total,
+    correctas: r.correctas || 0,
+    porcentaje: r.total ? Math.round(((r.correctas || 0) / r.total) * 100) : 0
+  }));
 
   res.json({
     estudiante,
@@ -97,12 +115,9 @@ router.get('/students/:id/summary', requireAdmin, asyncHandler(async (req, res) 
       num_preguntas: totalPreg,
       num_correctas: totalCorr,
       porcentaje_aciertos: totalPreg ? Math.round((totalCorr / totalPreg) * 100) : 0,
-      por_materia: porMateria.map(m => ({
-        materia: m.materia,
-        total: m.total,
-        correctas: m.correctas || 0,
-        porcentaje: m.total ? Math.round(((m.correctas || 0) / m.total) * 100) : 0
-      }))
+      por_materia: conDesglose(porMateria, 'materia'),
+      por_competencia: conDesglose(porCompetencia, 'competencia'),
+      por_eje: conDesglose(porEje, 'eje')
     },
     sesiones_recientes: sesiones.slice(0, 10)
   });

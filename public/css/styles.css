@@ -277,6 +277,11 @@ textarea { min-height: 90px; resize: vertical; }
   margin: 2rem auto;
 }
 
+.auth-subtitle {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .auth-tabs {
   display: flex;
   gap: 0.4rem;
@@ -312,6 +317,10 @@ textarea { min-height: 90px; resize: vertical; }
 .pill-media { background: var(--warning-bg); color: var(--warning); }
 .pill-dificil { background: var(--danger-bg); color: var(--danger); }
 .pill-materia { background: #e8eaf7; color: var(--primary); }
+.pill-competencia { background: #e3f0fb; color: #1b6fa8; }
+.pill-eje { background: #f1e9fb; color: #6a3fa0; }
+.pill-correcta { background: var(--success-bg); color: var(--success); }
+.pill-incorrecta { background: var(--danger-bg); color: var(--danger); }
 .pill-tipo-practica { background: #e8eaf7; color: var(--primary); }
 .pill-tipo-simulacro { background: #fbeadf; color: var(--accent-dark); }
 
@@ -357,6 +366,7 @@ tr.clickable:hover { background: var(--surface-2); }
   padding: 1.75rem;
   box-shadow: 0 24px 60px rgba(10, 14, 30, 0.35);
 }
+.modal-wide { max-width: 860px; }
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -551,6 +561,73 @@ tr.clickable:hover { background: var(--surface-2); }
   color: var(--text-muted);
   padding: 2.5rem 1rem;
 }
+
+/* ---------- Preguntas con texto/imagen largos: texto a la izquierda,
+   pregunta a la derecha (para no tener que hacer scroll entre ambos) ---- */
+
+.question-box-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+.question-box-split > .question-box-pills { grid-column: 1 / -1; }
+.question-box-split .question-box-fuente {
+  position: sticky;
+  top: 0.75rem;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.question-box-split .texto-base { margin-bottom: 0; }
+.question-box-split .question-box-pregunta .enunciado { margin-top: 0; }
+
+@media (max-width: 800px) {
+  .question-box-split { grid-template-columns: 1fr; }
+  .question-box-split .question-box-fuente { position: static; max-height: none; }
+}
+
+/* ---------- Selector con radio (modo del simulacro) ---------- */
+
+.opcion-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+.opcion-radio:has(input:checked) { border-color: var(--accent); background: #fdf1ea; }
+.opcion-radio input { accent-color: var(--accent); width: 16px; height: 16px; }
+
+/* ---------- Grafica de dona y barras con valor explicito ---------- */
+
+.donut-chart { flex-shrink: 0; }
+.donut-chart-label {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 800;
+  font-size: 17px;
+  fill: var(--primary-dark);
+}
+
+.barra-valor { margin-bottom: 0.9rem; }
+.barra-valor:last-child { margin-bottom: 0; }
+
+/* ---------- Revision pregunta por pregunta (retroalimentacion) -------- */
+
+.revision-pregunta {
+  border: 1.5px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.1rem;
+  text-align: left;
+}
+.revision-pregunta.correcta { border-left-color: var(--success); }
+.revision-pregunta.incorrecta { border-left-color: var(--danger); }
+.opciones-revision { margin-bottom: 0; gap: 0.4rem; }
+.opciones-revision .opcion { cursor: default; padding: 0.55rem 0.8rem; }
+.opciones-revision .opcion .hint { margin-left: auto; white-space: nowrap; }
 
 @media (max-width: 640px) {
   h1 { font-size: 1.5rem; }

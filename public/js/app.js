@@ -23,7 +23,8 @@
       tab: 'preguntas',
       preguntas: [],
       filtroMateria: '',
-      filtroDificultad: '',
+      filtroCompetencia: '',
+      filtroEje: '',
       modal: null, // { modo: 'crear'|'editar'|'ver', pregunta }
       modalError: '',
       estudiantes: [],
@@ -36,12 +37,41 @@
       practica: null,
       simulacro: null,
       resultado: null,
+      resultadoDetalle: null,
     }
   };
 
   const MATERIA_LABEL = { lectura_critica: 'Lectura Critica', matematicas: 'Matematicas' };
   const DIFICULTAD_LABEL = { facil: 'Facil', media: 'Media', dificil: 'Dificil' };
   const LETRAS = ['a', 'b', 'c', 'd'];
+
+  // Clasificacion oficial del Icfes (Marcos de referencia Saber 11): se usa
+  // en vez de facil/media/dificil como eje principal para organizar y elegir
+  // preguntas. Debe reflejar exactamente lo que valida el backend
+  // (src/routes/questions.js).
+  const COMPETENCIAS_POR_MATERIA = {
+    lectura_critica: ['identifica_contenidos_locales', 'comprende_sentido_global', 'reflexiona_evalua_contenido'],
+    matematicas: ['interpretacion_representacion', 'formulacion_ejecucion', 'argumentacion']
+  };
+  const EJES_POR_MATERIA = {
+    lectura_critica: ['literario', 'informativo'],
+    matematicas: ['algebra_calculo', 'geometria', 'estadistica']
+  };
+  const COMPETENCIA_LABEL = {
+    identifica_contenidos_locales: 'Identifica contenidos locales',
+    comprende_sentido_global: 'Comprende el sentido global',
+    reflexiona_evalua_contenido: 'Reflexiona y evalua el contenido',
+    interpretacion_representacion: 'Interpretacion y representacion',
+    formulacion_ejecucion: 'Formulacion y ejecucion',
+    argumentacion: 'Argumentacion'
+  };
+  const EJE_LABEL = {
+    literario: 'Texto literario',
+    informativo: 'Texto informativo',
+    algebra_calculo: 'Algebra y calculo',
+    geometria: 'Geometria',
+    estadistica: 'Estadistica'
+  };
 
   /* ---------------------------------------------------------------- */
   /* Utilidades                                                        */
@@ -59,12 +89,53 @@
 
   function materiaLabel(m) { return MATERIA_LABEL[m] || m || '-'; }
   function dificultadLabel(d) { return DIFICULTAD_LABEL[d] || d || '-'; }
+  function competenciaLabel(c) { return COMPETENCIA_LABEL[c] || c || '-'; }
+  function ejeLabel(j) { return EJE_LABEL[j] || j || '-'; }
+
+  // Una pregunta se muestra en formato "texto a la izquierda / pregunta a la
+  // derecha" cuando tiene imagen o un texto_base largo (lectura extensa),
+  // para que ambos queden visibles sin tener que hacer scroll entre ellos.
+  function esLayoutDividido(p) {
+    return !!(p && (p.imagen || (p.texto_base && p.texto_base.length > 220)));
+  }
 
   function formatTiempo(segundos) {
     segundos = Math.max(0, Math.round(Number(segundos) || 0));
     const m = Math.floor(segundos / 60);
     const s = segundos % 60;
     return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  // Grafica de dona simple en SVG (sin librerias externas) para mostrar un
+  // porcentaje con su valor exacto en el centro. r=42 => circunferencia ~264.
+  function donutSvg(pct, colorVar, tamano) {
+    pct = Math.max(0, Math.min(100, Math.round(pct)));
+    tamano = tamano || 132;
+    const r = 42, c = 2 * Math.PI * r;
+    const relleno = (pct / 100) * c;
+    return `
+      <svg width="${tamano}" height="${tamano}" viewBox="0 0 100 100" class="donut-chart" role="img" aria-label="${pct}%">
+        <circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--surface-2)" stroke-width="12" />
+        <circle cx="50" cy="50" r="${r}" fill="none" stroke="var(${colorVar || '--accent'})" stroke-width="12"
+          stroke-dasharray="${relleno.toFixed(1)} ${c.toFixed(1)}" stroke-linecap="round"
+          transform="rotate(-90 50 50)" />
+        <text x="50" y="54" text-anchor="middle" class="donut-chart-label">${pct}%</text>
+      </svg>
+    `;
+  }
+
+  // Barra horizontal con el valor exacto (correctas/total) ademas del
+  // porcentaje, para que quede claro de donde sale cada numero.
+  function barraConValor(label, correctas, total, pct) {
+    return `
+      <div class="barra-valor">
+        <div class="row between" style="margin-bottom:0.25rem;">
+          <strong>${label}</strong>
+          <span class="text-muted">${correctas}/${total} correctas &middot; ${pct}%</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;"></div></div>
+      </div>
+    `;
   }
 
   function formatFechaHora(fechaSql) {
@@ -191,7 +262,7 @@
       <div class="auth-wrap">
         <div class="text-center" style="margin-bottom:1.5rem;">
           <h1>Ruta Saber</h1>
-          <p class="text-muted">Practica guiada para el examen Saber 11</p>
+          <p class="auth-subtitle">Practica guiada para el examen Saber 11</p>
         </div>
         <div class="auth-tabs">
           <button data-tab="login" class="${t === 'login' ? 'active' : ''}">Iniciar sesion</button>
@@ -297,7 +368,8 @@
   async function loadAdminPreguntas() {
     const params = new URLSearchParams();
     if (state.admin.filtroMateria) params.set('materia', state.admin.filtroMateria);
-    if (state.admin.filtroDificultad) params.set('dificultad', state.admin.filtroDificultad);
+    if (state.admin.filtroCompetencia) params.set('competencia', state.admin.filtroCompetencia);
+    if (state.admin.filtroEje) params.set('eje', state.admin.filtroEje);
     const data = await api('/questions?' + params.toString());
     state.admin.preguntas = data.preguntas;
     render();
@@ -339,8 +411,9 @@
       <tr>
         <td>#${p.id}</td>
         <td><span class="pill pill-materia">${materiaLabel(p.materia)}</span></td>
-        <td><span class="pill pill-${p.dificultad}">${dificultadLabel(p.dificultad)}</span></td>
-        <td style="white-space:normal; max-width:360px;">${escapeHtml(p.enunciado).slice(0, 110)}${p.enunciado.length > 110 ? '&hellip;' : ''}</td>
+        <td><span class="pill pill-competencia">${competenciaLabel(p.competencia)}</span></td>
+        <td><span class="pill pill-eje">${ejeLabel(p.eje)}</span></td>
+        <td style="white-space:normal; max-width:320px;">${escapeHtml(p.enunciado).slice(0, 110)}${p.enunciado.length > 110 ? '&hellip;' : ''}</td>
         <td>${p.imagen ? '&#128247;' : ''}</td>
         <td>
           <div class="row" style="gap:0.4rem;">
@@ -352,27 +425,36 @@
       </tr>
     `).join('');
 
+    const opcionesCompetencia = a.filtroMateria
+      ? COMPETENCIAS_POR_MATERIA[a.filtroMateria].map(c => `<option value="${c}" ${a.filtroCompetencia === c ? 'selected' : ''}>${competenciaLabel(c)}</option>`).join('')
+      : '';
+    const opcionesEje = a.filtroMateria
+      ? EJES_POR_MATERIA[a.filtroMateria].map(j => `<option value="${j}" ${a.filtroEje === j ? 'selected' : ''}>${ejeLabel(j)}</option>`).join('')
+      : '';
+
     el('admin-content').innerHTML = `
       <div class="card">
-        <div class="row between" style="margin-bottom:1rem;">
-          <div class="row" style="gap:0.6rem;">
+        <div class="row between" style="margin-bottom:1rem; flex-wrap:wrap;">
+          <div class="row" style="gap:0.6rem; flex-wrap:wrap;">
             <select id="filtro-materia">
               <option value="">Todas las materias</option>
               <option value="lectura_critica" ${a.filtroMateria === 'lectura_critica' ? 'selected' : ''}>Lectura Critica</option>
               <option value="matematicas" ${a.filtroMateria === 'matematicas' ? 'selected' : ''}>Matematicas</option>
             </select>
-            <select id="filtro-dificultad">
-              <option value="">Toda dificultad</option>
-              <option value="facil" ${a.filtroDificultad === 'facil' ? 'selected' : ''}>Facil</option>
-              <option value="media" ${a.filtroDificultad === 'media' ? 'selected' : ''}>Media</option>
-              <option value="dificil" ${a.filtroDificultad === 'dificil' ? 'selected' : ''}>Dificil</option>
+            <select id="filtro-competencia" ${a.filtroMateria ? '' : 'disabled'}>
+              <option value="">Toda competencia</option>
+              ${opcionesCompetencia}
+            </select>
+            <select id="filtro-eje" ${a.filtroMateria ? '' : 'disabled'}>
+              <option value="">Todo eje</option>
+              ${opcionesEje}
             </select>
           </div>
           <button id="btn-nueva-pregunta" class="btn btn-primary">+ Agregar pregunta</button>
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Materia</th><th>Dificultad</th><th>Enunciado</th><th>Imagen</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>ID</th><th>Materia</th><th>Competencia</th><th>Eje</th><th>Enunciado</th><th>Imagen</th><th>Acciones</th></tr></thead>
             <tbody>${filas || ''}</tbody>
           </table>
           ${!a.preguntas.length ? '<div class="empty-state">No hay preguntas con estos filtros todavia.</div>' : ''}
@@ -380,8 +462,11 @@
       </div>
     `;
 
-    el('filtro-materia').onchange = (e) => { a.filtroMateria = e.target.value; loadAdminPreguntas(); };
-    el('filtro-dificultad').onchange = (e) => { a.filtroDificultad = e.target.value; loadAdminPreguntas(); };
+    el('filtro-materia').onchange = (e) => {
+      a.filtroMateria = e.target.value; a.filtroCompetencia = ''; a.filtroEje = ''; loadAdminPreguntas();
+    };
+    el('filtro-competencia').onchange = (e) => { a.filtroCompetencia = e.target.value; loadAdminPreguntas(); };
+    el('filtro-eje').onchange = (e) => { a.filtroEje = e.target.value; loadAdminPreguntas(); };
     el('btn-nueva-pregunta').onclick = () => { a.modal = { modo: 'crear', pregunta: null }; a.modalError = ''; render(); };
 
     app().querySelectorAll('[data-ver]').forEach(btn => {
@@ -421,18 +506,12 @@
     const titulo = modo === 'crear' ? 'Agregar pregunta' : modo === 'editar' ? 'Editar pregunta' : ('Pregunta #' + p.id);
 
     if (soloLectura) {
-      backdrop.innerHTML = `
-        <div class="modal">
-          <div class="modal-header">
-            <h2 class="mb-0">${titulo}</h2>
-            <button class="modal-close" id="modal-cerrar">&times;</button>
-          </div>
-          <div class="row" style="gap:0.5rem; margin-bottom:1rem;">
-            <span class="pill pill-materia">${materiaLabel(p.materia)}</span>
-            <span class="pill pill-${p.dificultad}">${dificultadLabel(p.dificultad)}</span>
-          </div>
-          ${p.texto_base ? `<div class="question-box"><div class="texto-base">${escapeHtml(p.texto_base)}</div></div>` : ''}
+      const dividido = esLayoutDividido(p);
+      const bloqueFuente = (p.texto_base || p.imagen) ? `
+          ${p.texto_base ? `<div class="texto-base">${escapeHtml(p.texto_base)}</div>` : ''}
           ${p.imagen ? `<img class="pregunta-img" src="${p.imagen}" alt="Imagen de la pregunta" />` : ''}
+      ` : '';
+      const bloquePregunta = `
           <p style="font-weight:600;">${escapeHtml(p.enunciado)}</p>
           <div class="opciones">
             ${LETRAS.map(l => `
@@ -443,6 +522,24 @@
             `).join('')}
           </div>
           ${p.explicacion ? `<p class="hint"><strong>Explicacion:</strong> ${escapeHtml(p.explicacion)}</p>` : ''}
+      `;
+      backdrop.innerHTML = `
+        <div class="modal modal-wide">
+          <div class="modal-header">
+            <h2 class="mb-0">${titulo}</h2>
+            <button class="modal-close" id="modal-cerrar">&times;</button>
+          </div>
+          <div class="row" style="gap:0.5rem; margin-bottom:1rem;">
+            <span class="pill pill-materia">${materiaLabel(p.materia)}</span>
+            <span class="pill pill-competencia">${competenciaLabel(p.competencia)}</span>
+            <span class="pill pill-eje">${ejeLabel(p.eje)}</span>
+          </div>
+          ${bloqueFuente ? `
+            <div class="question-box ${dividido ? 'question-box-split' : ''}">
+              <div class="question-box-fuente">${bloqueFuente}</div>
+              <div class="question-box-pregunta">${bloquePregunta}</div>
+            </div>
+          ` : bloquePregunta}
           <div class="row end"><button class="btn btn-outline" id="modal-cerrar-2">Cerrar</button></div>
         </div>
       `;
@@ -465,18 +562,20 @@
           <div class="grid-2">
             <div class="field">
               <label>Materia</label>
-              <select name="materia" required>
+              <select name="materia" id="input-materia" required>
                 <option value="lectura_critica" ${p.materia === 'lectura_critica' ? 'selected' : ''}>Lectura Critica</option>
-                <option value="matematicas" ${p.materia === 'matematicas' ? 'selected' : ''}>Matematicas</option>
+                <option value="matematicas" ${(p.materia === 'matematicas' || !p.materia) ? 'selected' : ''}>Matematicas</option>
               </select>
             </div>
+          </div>
+          <div class="grid-2">
             <div class="field">
-              <label>Dificultad</label>
-              <select name="dificultad" required>
-                <option value="facil" ${p.dificultad === 'facil' ? 'selected' : ''}>Facil</option>
-                <option value="media" ${p.dificultad === 'media' ? 'selected' : ''}>Media</option>
-                <option value="dificil" ${p.dificultad === 'dificil' ? 'selected' : ''}>Dificil</option>
-              </select>
+              <label>Competencia (Icfes)</label>
+              <select name="competencia" id="input-competencia" required></select>
+            </div>
+            <div class="field">
+              <label>Eje tematico</label>
+              <select name="eje" id="input-eje" required></select>
             </div>
           </div>
           <div class="field">
@@ -523,6 +622,18 @@
     `;
     document.body.appendChild(backdrop);
 
+    // Las opciones de competencia y eje dependen de la materia elegida (cada
+    // materia tiene su propia clasificacion oficial del Icfes), asi que se
+    // llenan por JS y se vuelven a llenar si el usuario cambia la materia.
+    function poblarTaxonomia(materiaActual, competenciaPrevia, ejePrevia) {
+      el('input-competencia').innerHTML = COMPETENCIAS_POR_MATERIA[materiaActual]
+        .map(c => `<option value="${c}" ${competenciaPrevia === c ? 'selected' : ''}>${competenciaLabel(c)}</option>`).join('');
+      el('input-eje').innerHTML = EJES_POR_MATERIA[materiaActual]
+        .map(j => `<option value="${j}" ${ejePrevia === j ? 'selected' : ''}>${ejeLabel(j)}</option>`).join('');
+    }
+    poblarTaxonomia(p.materia || 'matematicas', p.competencia, p.eje);
+    el('input-materia').onchange = (e) => poblarTaxonomia(e.target.value, null, null);
+
     const close = () => { backdrop.remove(); a.modal = null; render(); };
     el('modal-cerrar').onclick = close;
     el('modal-cancelar').onclick = close;
@@ -552,7 +663,8 @@
       const fd = new FormData(ev.target);
       const body = {
         materia: fd.get('materia'),
-        dificultad: fd.get('dificultad'),
+        competencia: fd.get('competencia'),
+        eje: fd.get('eje'),
         texto_base: fd.get('texto_base'),
         enunciado: fd.get('enunciado'),
         opcion_a: fd.get('opcion_a'),
@@ -629,7 +741,7 @@
     const u = a.estudianteSeleccionado;
 
     let cuerpo = '<div class="grid-3">' +
-      seccionBoton('practica', 'Practica', 'Sesiones de practica por materia y dificultad.') +
+      seccionBoton('practica', 'Practica', 'Sesiones de practica por materia, competencia y eje tematico.') +
       seccionBoton('simulacro', 'Simulacro', 'Simulacros completos tipo examen.') +
       seccionBoton('global', 'Estadisticas globales', 'Resumen general y desglose por materia.') +
       '</div>';
@@ -693,6 +805,8 @@
       const filas = sesiones.map(s => {
         const fh = formatFechaHora(s.fecha_inicio);
         const pct = s.num_preguntas ? Math.round((s.num_correctas / s.num_preguntas) * 100) : 0;
+        const enfoque = [s.competencia ? competenciaLabel(s.competencia) : '', s.eje ? ejeLabel(s.eje) : '']
+          .filter(Boolean).join(' / ') || 'Toda la materia';
         return `
           <tr>
             <td>${fh.fecha}</td>
@@ -700,7 +814,9 @@
             <td>${s.num_preguntas}</td>
             <td>${s.num_correctas} (${pct}%)</td>
             <td>${formatTiempo(s.tiempo_segundos)}</td>
-            ${tipo === 'practica' ? `<td>${dificultadLabel(s.dificultad)}</td><td>${materiaLabel(s.materia)}</td>` : `<td>${s.nivel_estimado || '-'}</td>`}
+            ${tipo === 'practica'
+              ? `<td>${materiaLabel(s.materia)}</td><td>${enfoque}</td>`
+              : `<td>${s.nivel_estimado || '-'}</td><td>${s.materias ? s.materias.split(',').map(materiaLabel).join(' + ') : 'Ambas'}</td>`}
           </tr>
         `;
       }).join('');
@@ -713,7 +829,7 @@
               <thead>
                 <tr>
                   <th>Fecha</th><th>Hora</th><th>Preg. totales</th><th>Correctas</th><th>Tiempo</th>
-                  ${tipo === 'practica' ? '<th>Nivel</th><th>Materia</th>' : '<th>Nivel estimado</th>'}
+                  ${tipo === 'practica' ? '<th>Materia</th><th>Enfoque</th>' : '<th>Nivel estimado</th><th>Materias</th>'}
                 </tr>
               </thead>
               <tbody>${filas}</tbody>
@@ -727,15 +843,9 @@
 
     // Estadisticas globales
     const r = datos.resumen;
-    const barrasMateria = r.por_materia.map(m => `
-      <div style="margin-bottom:0.8rem;">
-        <div class="row between" style="margin-bottom:0.25rem;">
-          <strong>${materiaLabel(m.materia)}</strong>
-          <span class="text-muted">${m.correctas}/${m.total} &middot; ${m.porcentaje}%</span>
-        </div>
-        <div class="bar-track"><div class="bar-fill blue" style="width:${m.porcentaje}%;"></div></div>
-      </div>
-    `).join('');
+    const barrasMateria = r.por_materia.map(m => barraConValor(materiaLabel(m.materia), m.correctas, m.total, m.porcentaje)).join('');
+    const barrasCompetencia = (r.por_competencia || []).map(c => barraConValor(competenciaLabel(c.competencia), c.correctas, c.total, c.porcentaje)).join('');
+    const barrasEje = (r.por_eje || []).map(e => barraConValor(ejeLabel(e.eje), e.correctas, e.total, e.porcentaje)).join('');
 
     const recientes = datos.sesiones_recientes.map(s => {
       const fh = formatFechaHora(s.fecha_inicio);
@@ -753,20 +863,19 @@
     cont.innerHTML = `
       <div class="card">
         <h3>Estadisticas globales</h3>
-        <div class="grid-3" style="margin-bottom:1.5rem;">
-          <div class="stat-card"><div class="stat-value">${r.num_sesiones}</div><div class="stat-label">Sesiones totales</div></div>
-          <div class="stat-card"><div class="stat-value">${r.num_practicas}</div><div class="stat-label">Practicas</div></div>
-          <div class="stat-card"><div class="stat-value">${r.num_simulacros}</div><div class="stat-label">Simulacros</div></div>
-        </div>
-        <div style="margin-bottom:1.5rem;">
-          <div class="row between" style="margin-bottom:0.25rem;">
-            <strong>% de aciertos general</strong>
-            <span class="text-muted">${r.num_correctas}/${r.num_preguntas}</span>
+        <div class="row" style="gap:1.5rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
+          ${donutSvg(r.porcentaje_aciertos, '--accent')}
+          <div class="grid-3" style="flex:1; min-width:220px;">
+            <div class="stat-card"><div class="stat-value">${r.num_sesiones}</div><div class="stat-label">Sesiones totales</div></div>
+            <div class="stat-card"><div class="stat-value">${r.num_practicas}</div><div class="stat-label">Practicas</div></div>
+            <div class="stat-card"><div class="stat-value">${r.num_simulacros}</div><div class="stat-label">Simulacros</div></div>
           </div>
-          <div class="bar-track"><div class="bar-fill" style="width:${r.porcentaje_aciertos}%;"></div></div>
         </div>
+        <p class="hint" style="margin-bottom:1.25rem;">El % de aciertos general se calcula como respuestas correctas &divide; preguntas respondidas en todas las sesiones (${r.num_correctas}/${r.num_preguntas} = ${r.porcentaje_aciertos}%). Cada barra de abajo aplica el mismo calculo, pero solo con las preguntas de esa categoria.</p>
         <h4>Desglose por materia</h4>
         ${barrasMateria || '<p class="text-muted">Sin datos todavia.</p>'}
+        ${barrasCompetencia ? `<h4 style="margin-top:1.25rem;">Desglose por competencia</h4>${barrasCompetencia}` : ''}
+        ${barrasEje ? `<h4 style="margin-top:1.25rem;">Desglose por eje tematico</h4>${barrasEje}` : ''}
       </div>
       <div class="card">
         <h3>Sesiones recientes</h3>
@@ -803,7 +912,7 @@
         <button class="mode-card" id="ir-practica">
           <div class="mode-icon">P</div>
           <h3>Practica</h3>
-          <p class="text-muted mb-0">Elige materia y dificultad, con cronometro que puedes pausar entre preguntas.</p>
+          <p class="text-muted mb-0">Elige materia, competencia o eje tematico, con cronometro que puedes pausar entre preguntas.</p>
         </button>
         <button class="mode-card" id="ir-simulacro">
           <div class="mode-icon">S</div>
@@ -819,25 +928,27 @@
   /* ---------- Practica ---------- */
 
   function renderPracticaConfig() {
+    const materiaInicial = 'lectura_critica';
     app().innerHTML = `
       <button class="btn btn-ghost btn-sm" id="volver">&larr; Volver</button>
       <h1>Practica</h1>
       <div class="card" style="max-width:480px;">
+        <p class="hint">Elige la materia y, si quieres, enfoca la practica en una competencia o un eje tematico especifico (clasificacion oficial del Icfes). Si los dejas en "Todas", se mezclan preguntas de toda la materia.</p>
         <form id="form-practica" class="stack">
           <div class="field">
             <label>Materia</label>
-            <select name="materia" required>
+            <select name="materia" id="input-p-materia" required>
               <option value="lectura_critica">Lectura Critica</option>
               <option value="matematicas">Matematicas</option>
             </select>
           </div>
           <div class="field">
-            <label>Dificultad</label>
-            <select name="dificultad" required>
-              <option value="facil">Facil</option>
-              <option value="media">Media</option>
-              <option value="dificil">Dificil</option>
-            </select>
+            <label>Competencia (opcional)</label>
+            <select name="competencia" id="input-p-competencia"></select>
+          </div>
+          <div class="field">
+            <label>Eje tematico (opcional)</label>
+            <select name="eje" id="input-p-eje"></select>
           </div>
           <div class="field">
             <label>Cantidad de preguntas</label>
@@ -851,21 +962,34 @@
         </form>
       </div>
     `;
+    function poblarTaxonomiaPractica(materiaActual) {
+      el('input-p-competencia').innerHTML = '<option value="">Todas</option>' +
+        COMPETENCIAS_POR_MATERIA[materiaActual].map(c => `<option value="${c}">${competenciaLabel(c)}</option>`).join('');
+      el('input-p-eje').innerHTML = '<option value="">Todos</option>' +
+        EJES_POR_MATERIA[materiaActual].map(j => `<option value="${j}">${ejeLabel(j)}</option>`).join('');
+    }
+    poblarTaxonomiaPractica(materiaInicial);
+    el('input-p-materia').onchange = (e) => poblarTaxonomiaPractica(e.target.value);
+
     el('volver').onclick = () => { state.estudiante.pantalla = 'inicio'; render(); };
     el('form-practica').onsubmit = async (ev) => {
       ev.preventDefault();
       const fd = new FormData(ev.target);
-      const materia = fd.get('materia'), dificultad = fd.get('dificultad'), count = fd.get('count');
-      const data = await api(`/questions/practice?materia=${materia}&dificultad=${dificultad}&count=${count}`);
+      const materia = fd.get('materia'), competencia = fd.get('competencia'), eje = fd.get('eje'), count = fd.get('count');
+      const params = new URLSearchParams({ materia, count });
+      if (competencia) params.set('competencia', competencia);
+      if (eje) params.set('eje', eje);
+      const data = await api(`/questions/practice?${params.toString()}`);
       if (!data.preguntas.length) {
-        alert('Todavia no hay preguntas cargadas para esa materia y dificultad. Elige otra combinacion.');
+        alert('Todavia no hay preguntas cargadas para esa combinacion. Elige otra competencia o eje.');
         return;
       }
       state.estudiante.practica = {
-        materia, dificultad,
+        materia, competencia, eje,
         preguntas: data.preguntas,
         idx: 0,
         respuestas: new Array(data.preguntas.length).fill(null),
+        tiempoPorPregunta: new Array(data.preguntas.length).fill(0),
         tiempo: 0,
         pausado: false,
         intervalo: null
@@ -882,6 +1006,7 @@
     pr.intervalo = setInterval(() => {
       if (!pr.pausado) {
         pr.tiempo += 1;
+        pr.tiempoPorPregunta[pr.idx] = (pr.tiempoPorPregunta[pr.idx] || 0) + 1;
         const t = el('practica-timer');
         if (t) t.textContent = formatTiempo(pr.tiempo);
       }
@@ -894,20 +1019,12 @@
     const seleccion = pr.respuestas[pr.idx];
     const esUltima = pr.idx === pr.preguntas.length - 1;
 
-    app().innerHTML = `
-      <div class="exam-header">
-        <div>
-          <div class="eyebrow">Practica &middot; ${materiaLabel(pr.materia)} &middot; ${dificultadLabel(pr.dificultad)}</div>
-          <h2 class="mb-0">Pregunta ${pr.idx + 1} de ${pr.preguntas.length}</h2>
-        </div>
-        <div class="row" style="gap:0.6rem;">
-          <span id="practica-timer" class="timer ${pr.pausado ? 'paused' : ''}">${formatTiempo(pr.tiempo)}</span>
-          <button class="btn ${pr.pausado ? 'btn-primary' : 'btn-outline'}" id="btn-pausa">${pr.pausado ? 'Continuar' : 'Pausar'}</button>
-        </div>
-      </div>
-      <div class="card question-box">
+    const dividido = esLayoutDividido(q);
+    const bloqueFuente = (q.texto_base || q.imagen) ? `
         ${q.texto_base ? `<div class="texto-base">${escapeHtml(q.texto_base)}</div>` : ''}
         ${q.imagen ? `<img class="pregunta-img" src="${q.imagen}" alt="Imagen de la pregunta" />` : ''}
+    ` : '';
+    const bloquePregunta = `
         <div class="enunciado">${escapeHtml(q.enunciado)}</div>
         <div class="opciones" id="opciones">
           ${LETRAS.map(l => `
@@ -924,7 +1041,24 @@
             : `<button class="btn btn-secondary" id="btn-siguiente" ${pr.pausado ? 'disabled' : ''}>Siguiente &rarr;</button>`}
         </div>
         ${pr.pausado ? '<p class="hint" style="margin-top:0.75rem;">El cronometro esta en pausa. Presiona "Continuar" para seguir avanzando.</p>' : ''}
+    `;
+
+    app().innerHTML = `
+      <div class="exam-header">
+        <div>
+          <div class="eyebrow">Practica &middot; ${materiaLabel(pr.materia)} &middot; ${competenciaLabel(q.competencia)} &middot; ${ejeLabel(q.eje)}</div>
+          <h2 class="mb-0">Pregunta ${pr.idx + 1} de ${pr.preguntas.length}</h2>
+        </div>
+        <div class="row" style="gap:0.6rem;">
+          <span id="practica-timer" class="timer ${pr.pausado ? 'paused' : ''}">${formatTiempo(pr.tiempo)}</span>
+          <button class="btn ${pr.pausado ? 'btn-primary' : 'btn-outline'}" id="btn-pausa">${pr.pausado ? 'Continuar' : 'Pausar'}</button>
+        </div>
       </div>
+      ${bloqueFuente ? `
+      <div class="card question-box ${dividido ? 'question-box-split' : ''}">
+        <div class="question-box-fuente">${bloqueFuente}</div>
+        <div class="question-box-pregunta">${bloquePregunta}</div>
+      </div>` : `<div class="card question-box">${bloquePregunta}</div>`}
     `;
 
     el('btn-pausa').onclick = () => { pr.pausado = !pr.pausado; render(); };
@@ -946,12 +1080,15 @@
   async function finalizarPractica() {
     const pr = state.estudiante.practica;
     if (pr.intervalo) clearInterval(pr.intervalo);
-    const respuestas = pr.preguntas.map((q, i) => ({ question_id: q.id, respuesta_usuario: pr.respuestas[i] }));
+    const respuestas = pr.preguntas.map((q, i) => ({
+      question_id: q.id, respuesta_usuario: pr.respuestas[i], tiempo_segundos: pr.tiempoPorPregunta[i] || 0
+    }));
     const data = await api('/sessions', {
       method: 'POST',
-      body: { tipo: 'practica', materia: pr.materia, dificultad: pr.dificultad, tiempo_segundos: pr.tiempo, respuestas }
+      body: { tipo: 'practica', materia: pr.materia, competencia: pr.competencia, eje: pr.eje, tiempo_segundos: pr.tiempo, respuestas }
     });
     state.estudiante.resultado = data.sesion;
+    state.estudiante.resultadoDetalle = data.detalle;
     state.estudiante.pantalla = 'resultado';
     render();
   }
@@ -963,14 +1100,31 @@
       <button class="btn btn-ghost btn-sm" id="volver">&larr; Volver</button>
       <h1>Simulacro</h1>
       <div class="card" style="max-width:480px;">
-        <p class="text-muted">El simulacro incluye preguntas de Lectura Critica y Matematicas, con un cronometro que corre desde el inicio. Puedes moverte libremente entre preguntas y cambiar de materia cuando quieras.</p>
+        <p class="text-muted">El simulacro tiene un cronometro que corre desde el inicio. Puedes moverte libremente entre preguntas y, si eliges ambas materias, cambiar de materia cuando quieras.</p>
         <form id="form-simulacro" class="stack">
+          <div class="field">
+            <label>¿Que quieres presentar?</label>
+            <div class="stack" style="gap:0.5rem;">
+              <label class="opcion-radio">
+                <input type="radio" name="modo" value="lectura_critica" />
+                <span>Solo Lectura Critica</span>
+              </label>
+              <label class="opcion-radio">
+                <input type="radio" name="modo" value="matematicas" />
+                <span>Solo Matematicas</span>
+              </label>
+              <label class="opcion-radio">
+                <input type="radio" name="modo" value="ambas" checked />
+                <span>Ambas materias</span>
+              </label>
+            </div>
+          </div>
           <div class="field">
             <label>Preguntas por materia (aprox.)</label>
             <select name="porMateria">
-              <option value="6">6 por materia (12 en total)</option>
-              <option value="9" selected>9 por materia (18 en total)</option>
-              <option value="12">12 por materia (24 en total)</option>
+              <option value="6">6 por materia (12 en total si eliges ambas)</option>
+              <option value="9" selected>9 por materia (18 en total si eliges ambas)</option>
+              <option value="12">12 por materia (24 en total si eliges ambas)</option>
             </select>
           </div>
           <button type="submit" class="btn btn-primary btn-block">Iniciar simulacro</button>
@@ -982,7 +1136,9 @@
       ev.preventDefault();
       const fd = new FormData(ev.target);
       const porMateria = fd.get('porMateria');
-      const data = await api('/questions/simulacro-pool?porMateria=' + porMateria);
+      const modo = fd.get('modo') || 'ambas';
+      const materias = modo === 'ambas' ? ['lectura_critica', 'matematicas'] : [modo];
+      const data = await api(`/questions/simulacro-pool?porMateria=${porMateria}&materias=${materias.join(',')}`);
       if (!data.preguntas.length) {
         alert('Todavia no hay suficientes preguntas cargadas para el simulacro.');
         return;
@@ -991,11 +1147,13 @@
       data.preguntas.forEach(q => { (byMateria[q.materia] || byMateria.lectura_critica).push(q); });
 
       state.estudiante.simulacro = {
+        materias,
         todas: data.preguntas,
         byMateria,
-        tab: byMateria.lectura_critica.length ? 'lectura_critica' : 'matematicas',
+        tab: materias[0],
         pos: { lectura_critica: 0, matematicas: 0 },
         respuestas: {},
+        tiempoPorPregunta: {},
         tiempo: 0,
         intervalo: null
       };
@@ -1010,6 +1168,9 @@
     if (sm.intervalo) clearInterval(sm.intervalo);
     sm.intervalo = setInterval(() => {
       sm.tiempo += 1;
+      const subset = sm.byMateria[sm.tab] || [];
+      const qActual = subset[sm.pos[sm.tab] || 0];
+      if (qActual) sm.tiempoPorPregunta[qActual.id] = (sm.tiempoPorPregunta[qActual.id] || 0) + 1;
       const t = el('simulacro-timer');
       if (t) t.textContent = formatTiempo(sm.tiempo);
     }, 1000);
@@ -1055,28 +1216,38 @@
         <div class="q-grid">${grid}</div>
       </div>
 
-      ${q ? `
-      <div class="card question-box">
-        <div class="row" style="gap:0.5rem; margin-bottom:0.75rem;">
-          <span class="pill pill-materia">${materiaLabel(q.materia)}</span>
-          <span class="pill pill-${q.dificultad}">${dificultadLabel(q.dificultad)}</span>
-        </div>
-        ${q.texto_base ? `<div class="texto-base">${escapeHtml(q.texto_base)}</div>` : ''}
-        ${q.imagen ? `<img class="pregunta-img" src="${q.imagen}" alt="Imagen de la pregunta" />` : ''}
-        <div class="enunciado">${escapeHtml(q.enunciado)}</div>
-        <div class="opciones" id="opciones">
-          ${LETRAS.map(l => `
-            <button type="button" class="opcion ${seleccion === l ? 'selected' : ''}" data-letra="${l}">
-              <span class="letra">${l.toUpperCase()}</span>
-              <span>${escapeHtml(q['opcion_' + l])}</span>
-            </button>
-          `).join('')}
-        </div>
-        <div class="row between">
-          <button class="btn btn-outline" id="btn-anterior" ${pos === 0 ? 'disabled' : ''}>&larr; Anterior</button>
-          <button class="btn btn-secondary" id="btn-siguiente" ${pos === subset.length - 1 ? 'disabled' : ''}>Siguiente &rarr;</button>
-        </div>
-      </div>` : '<div class="card"><p class="text-muted mb-0">No hay preguntas en esta materia.</p></div>'}
+      ${q ? (() => {
+        const dividido = esLayoutDividido(q);
+        const pills = `
+          <div class="row question-box-pills" style="gap:0.5rem; margin-bottom:0.75rem;">
+            <span class="pill pill-materia">${materiaLabel(q.materia)}</span>
+            <span class="pill pill-competencia">${competenciaLabel(q.competencia)}</span>
+            <span class="pill pill-eje">${ejeLabel(q.eje)}</span>
+          </div>
+        `;
+        const bloqueFuente = (q.texto_base || q.imagen) ? `
+          ${q.texto_base ? `<div class="texto-base">${escapeHtml(q.texto_base)}</div>` : ''}
+          ${q.imagen ? `<img class="pregunta-img" src="${q.imagen}" alt="Imagen de la pregunta" />` : ''}
+        ` : '';
+        const bloquePregunta = `
+          <div class="enunciado">${escapeHtml(q.enunciado)}</div>
+          <div class="opciones" id="opciones">
+            ${LETRAS.map(l => `
+              <button type="button" class="opcion ${seleccion === l ? 'selected' : ''}" data-letra="${l}">
+                <span class="letra">${l.toUpperCase()}</span>
+                <span>${escapeHtml(q['opcion_' + l])}</span>
+              </button>
+            `).join('')}
+          </div>
+          <div class="row between">
+            <button class="btn btn-outline" id="btn-anterior" ${pos === 0 ? 'disabled' : ''}>&larr; Anterior</button>
+            <button class="btn btn-secondary" id="btn-siguiente" ${pos === subset.length - 1 ? 'disabled' : ''}>Siguiente &rarr;</button>
+          </div>
+        `;
+        return bloqueFuente
+          ? `<div class="card question-box ${dividido ? 'question-box-split' : ''}">${pills}<div class="question-box-fuente">${bloqueFuente}</div><div class="question-box-pregunta">${bloquePregunta}</div></div>`
+          : `<div class="card question-box">${pills}${bloquePregunta}</div>`;
+      })() : '<div class="card"><p class="text-muted mb-0">No hay preguntas en esta materia.</p></div>'}
     `;
 
     app().querySelectorAll('.subject-tabs button').forEach(btn => {
@@ -1106,12 +1277,15 @@
       if (!ok) return;
     }
     if (sm.intervalo) clearInterval(sm.intervalo);
-    const respuestas = sm.todas.map(q => ({ question_id: q.id, respuesta_usuario: sm.respuestas[q.id] || null }));
+    const respuestas = sm.todas.map(q => ({
+      question_id: q.id, respuesta_usuario: sm.respuestas[q.id] || null, tiempo_segundos: sm.tiempoPorPregunta[q.id] || 0
+    }));
     const data = await api('/sessions', {
       method: 'POST',
-      body: { tipo: 'simulacro', tiempo_segundos: sm.tiempo, respuestas }
+      body: { tipo: 'simulacro', materias: sm.materias, tiempo_segundos: sm.tiempo, respuestas }
     });
     state.estudiante.resultado = data.sesion;
+    state.estudiante.resultadoDetalle = data.detalle;
     state.estudiante.pantalla = 'resultado';
     render();
   }
@@ -1120,21 +1294,70 @@
 
   function renderResultado() {
     const r = state.estudiante.resultado;
+    const det = state.estudiante.resultadoDetalle;
     const pct = r.num_preguntas ? Math.round((r.num_correctas / r.num_preguntas) * 100) : 0;
+    const tiempoPromedio = det && det.preguntas.length
+      ? Math.round(det.preguntas.reduce((a, p) => a + (p.tiempo_segundos || 0), 0) / det.preguntas.length)
+      : 0;
+
+    const mejorar = det ? [...det.porCompetencia, ...det.porEje] : [];
+    const bloqueMejorar = mejorar.length ? `
+      <div class="card">
+        <h3>¿En que conviene reforzar?</h3>
+        <p class="hint">Se calcula como el porcentaje de aciertos dentro de cada competencia o eje que aparecio en esta sesion (correctas &divide; total de esa categoria). Los que quedaron por debajo del 70% son los que mas conviene repasar.</p>
+        ${det.porCompetencia.map(g => barraConValor('Competencia: ' + competenciaLabel(g.clave), g.correctas, g.total, g.porcentaje)).join('')}
+        ${det.porEje.map(g => barraConValor('Eje: ' + ejeLabel(g.clave), g.correctas, g.total, g.porcentaje)).join('')}
+        ${det.aMejorar.length ? `<p class="hint" style="margin-top:0.5rem;">Prioriza: ${det.aMejorar.map(k => `<strong>${competenciaLabel(k) !== k ? competenciaLabel(k) : ejeLabel(k)}</strong>`).join(', ')}.</p>` : '<p class="hint" style="margin-top:0.5rem;">Buen desempeño en todas las categorias de esta sesion (70% o mas de aciertos).</p>'}
+      </div>
+    ` : '';
+
+    const bloquePreguntas = det ? `
+      <div class="card">
+        <h3>Revision pregunta por pregunta</h3>
+        <div class="stack" style="gap:0.9rem;">
+          ${det.preguntas.map((p, i) => `
+            <div class="revision-pregunta ${p.correcta ? 'correcta' : 'incorrecta'}">
+              <div class="row between" style="gap:0.5rem; flex-wrap:wrap;">
+                <strong>Pregunta ${i + 1}${p.competencia ? ' &middot; ' + competenciaLabel(p.competencia) : ''}${p.eje ? ' &middot; ' + ejeLabel(p.eje) : ''}</strong>
+                <span class="pill ${p.correcta ? 'pill-correcta' : 'pill-incorrecta'}">${p.correcta ? 'Correcta' : 'Incorrecta'}</span>
+              </div>
+              ${p.enunciado ? `<p style="margin:0.5rem 0;">${escapeHtml(p.enunciado)}</p>` : ''}
+              ${p.opciones ? `
+                <div class="opciones opciones-revision">
+                  ${LETRAS.map(l => `
+                    <div class="opcion readonly ${p.respuesta_correcta === l ? 'correcta' : ''} ${p.respuesta_usuario === l && p.respuesta_usuario !== p.respuesta_correcta ? 'incorrecta' : ''}">
+                      <span class="letra">${l.toUpperCase()}</span>
+                      <span>${escapeHtml(p.opciones[l])}</span>
+                      ${p.respuesta_usuario === l ? '<span class="hint">(tu respuesta)</span>' : ''}
+                    </div>
+                  `).join('')}
+                </div>
+              ` : ''}
+              ${p.explicacion ? `<p class="hint" style="margin-top:0.5rem;"><strong>Explicacion:</strong> ${escapeHtml(p.explicacion)}</p>` : ''}
+              <p class="hint mb-0" style="margin-top:0.4rem;">Tiempo en esta pregunta: ${formatTiempo(p.tiempo_segundos)}</p>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : '';
+
     app().innerHTML = `
-      <div class="text-center" style="max-width:520px; margin:0 auto;">
+      <div class="text-center" style="max-width:640px; margin:0 auto;">
         <h1>${r.tipo === 'practica' ? '¡Practica completada!' : '¡Simulacro completado!'}</h1>
         <div class="card">
-          <div class="grid-3">
-            <div class="stat-card"><div class="stat-value">${r.num_preguntas}</div><div class="stat-label">Preguntas</div></div>
-            <div class="stat-card"><div class="stat-value">${r.num_correctas}</div><div class="stat-label">Correctas</div></div>
-            <div class="stat-card"><div class="stat-value">${pct}%</div><div class="stat-label">Aciertos</div></div>
+          <div class="row" style="gap:1.5rem; align-items:center; justify-content:center; flex-wrap:wrap;">
+            ${donutSvg(pct, '--accent')}
+            <div class="grid-3" style="flex:1; min-width:220px;">
+              <div class="stat-card"><div class="stat-value">${r.num_preguntas}</div><div class="stat-label">Preguntas</div></div>
+              <div class="stat-card"><div class="stat-value">${r.num_correctas}</div><div class="stat-label">Correctas</div></div>
+              <div class="stat-card"><div class="stat-value">${pct}%</div><div class="stat-label">Aciertos</div></div>
+            </div>
           </div>
-          <div style="margin-top:1.25rem;">
-            <div class="bar-track"><div class="bar-fill" style="width:${pct}%;"></div></div>
-          </div>
-          <p class="text-muted" style="margin-top:1rem;">Tiempo total: ${formatTiempo(r.tiempo_segundos)}${r.nivel_estimado ? ' &middot; Nivel estimado: ' + r.nivel_estimado : ''}</p>
+          <p class="hint text-center" style="margin-top:0.75rem;">El porcentaje de aciertos se calcula como preguntas correctas &divide; preguntas totales (${r.num_correctas}/${r.num_preguntas} = ${pct}%).</p>
+          <p class="text-muted text-center" style="margin-top:0.5rem;">Tiempo total: ${formatTiempo(r.tiempo_segundos)} &middot; Tiempo promedio por pregunta: ${formatTiempo(tiempoPromedio)}${r.nivel_estimado ? ' &middot; Nivel estimado: ' + r.nivel_estimado : ''}</p>
         </div>
+        ${bloqueMejorar}
+        ${bloquePreguntas}
         <button class="btn btn-primary" id="btn-volver-inicio">Volver al inicio</button>
       </div>
     `;
@@ -1142,6 +1365,7 @@
       state.estudiante.practica = null;
       state.estudiante.simulacro = null;
       state.estudiante.resultado = null;
+      state.estudiante.resultadoDetalle = null;
       state.estudiante.pantalla = 'inicio';
       render();
     };

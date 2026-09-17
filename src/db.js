@@ -81,6 +81,8 @@ function initSchema() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       materia TEXT NOT NULL CHECK(materia IN ('lectura_critica','matematicas')),
       dificultad TEXT NOT NULL CHECK(dificultad IN ('facil','media','dificil')),
+      competencia TEXT,
+      eje TEXT,
       texto_base TEXT,
       enunciado TEXT NOT NULL,
       opcion_a TEXT NOT NULL,
@@ -102,6 +104,9 @@ function initSchema() {
       tipo TEXT NOT NULL CHECK(tipo IN ('practica','simulacro')),
       materia TEXT,
       dificultad TEXT,
+      competencia TEXT,
+      eje TEXT,
+      materias TEXT,
       num_preguntas INTEGER NOT NULL DEFAULT 0,
       num_correctas INTEGER NOT NULL DEFAULT 0,
       tiempo_segundos INTEGER NOT NULL DEFAULT 0,
@@ -118,8 +123,11 @@ function initSchema() {
       orden INTEGER NOT NULL,
       materia TEXT NOT NULL,
       dificultad TEXT NOT NULL,
+      competencia TEXT,
+      eje TEXT,
       respuesta_usuario TEXT,
       correcta INTEGER NOT NULL DEFAULT 0,
+      tiempo_segundos INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY(session_id) REFERENCES exam_sessions(id),
       FOREIGN KEY(question_id) REFERENCES questions(id)
@@ -129,7 +137,38 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON exam_sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_answers_session ON exam_answers(session_id);
   `);
-  return schemaReady;
+  return schemaReady.then(() => migrateColumns()).then(() => createExtraIndexes());
+}
+
+// Migracion ligera e idempotente: agrega columnas nuevas a bases de datos que
+// ya existian antes de introducir ejes/competencias y el tiempo por pregunta,
+// sin afectar los datos historicos (sesiones y respuestas ya guardadas). Debe
+// correr antes de crear indices sobre esas columnas, porque CREATE TABLE IF
+// NOT EXISTS no modifica una tabla que ya existia con el esquema viejo.
+async function migrateColumns() {
+  const migrations = [
+    { table: 'questions', column: 'competencia', ddl: 'ALTER TABLE questions ADD COLUMN competencia TEXT' },
+    { table: 'questions', column: 'eje', ddl: 'ALTER TABLE questions ADD COLUMN eje TEXT' },
+    { table: 'exam_answers', column: 'competencia', ddl: 'ALTER TABLE exam_answers ADD COLUMN competencia TEXT' },
+    { table: 'exam_answers', column: 'eje', ddl: 'ALTER TABLE exam_answers ADD COLUMN eje TEXT' },
+    { table: 'exam_answers', column: 'tiempo_segundos', ddl: 'ALTER TABLE exam_answers ADD COLUMN tiempo_segundos INTEGER NOT NULL DEFAULT 0' },
+    { table: 'exam_sessions', column: 'competencia', ddl: 'ALTER TABLE exam_sessions ADD COLUMN competencia TEXT' },
+    { table: 'exam_sessions', column: 'eje', ddl: 'ALTER TABLE exam_sessions ADD COLUMN eje TEXT' },
+    { table: 'exam_sessions', column: 'materias', ddl: 'ALTER TABLE exam_sessions ADD COLUMN materias TEXT' }
+  ];
+  for (const { table, column, ddl } of migrations) {
+    const cols = await all(`PRAGMA table_info(${table})`);
+    const exists = cols.some((c) => c.name === column);
+    if (!exists) {
+      await run(ddl);
+      console.log(`[db] Migracion aplicada: ${table}.${column}`);
+    }
+  }
+}
+
+async function createExtraIndexes() {
+  await run('CREATE INDEX IF NOT EXISTS idx_questions_materia_competencia ON questions(materia, competencia, activo)');
+  await run('CREATE INDEX IF NOT EXISTS idx_questions_materia_eje ON questions(materia, eje, activo)');
 }
 
 module.exports = { run, get, all, batch, execMultiple, initSchema, client };
