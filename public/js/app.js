@@ -107,10 +107,11 @@
   function ejeLabel(j) { return EJE_LABEL[j] || j || '-'; }
 
   // Una pregunta se muestra en formato "texto a la izquierda / pregunta a la
-  // derecha" cuando tiene imagen o un texto_base largo (lectura extensa),
-  // para que ambos queden visibles sin tener que hacer scroll entre ellos.
+  // derecha" siempre que tenga una lectura (corta o larga) o una imagen: el
+  // texto queda fijo de un lado y lo unico que cambia al pasar de pregunta
+  // en pregunta, dentro de un mismo grupo, es el lado de la pregunta.
   function esLayoutDividido(p) {
-    return !!(p && (p.imagen || (p.texto_base && p.texto_base.length > 220) || (p.texto_contenido && p.texto_contenido.length > 220)));
+    return !!(p && (p.imagen || p.texto_base || p.texto_contenido));
   }
 
   // Devuelve el texto de lectura que corresponde a una pregunta: si
@@ -1754,7 +1755,9 @@
     const esUltima = pr.idx === pr.preguntas.length - 1;
 
     const textoCompartido = textoDe(q, pr.textosMap);
-    const dividido = !!(q.imagen || (textoCompartido && textoCompartido.length > 220));
+    // El texto (corto o largo) siempre va a un lado, fijo; lo que cambia al
+    // pasar de pregunta es solo el lado de la pregunta.
+    const dividido = !!(q.imagen || textoCompartido);
     const grupoTotal = q.texto_id ? pr.preguntas.filter(x => x.texto_id === q.texto_id).length : 0;
     const bloqueFuente = (textoCompartido || q.imagen) ? `
         ${(q.texto_id && textoCompartido) ? `<div class="texto-grupo-aviso">Responde las siguientes ${grupoTotal} preguntas con el texto presentado.</div>` : ''}
@@ -1956,7 +1959,9 @@
 
       ${q ? (() => {
         const textoCompartido = textoDe(q, sm.textosMap);
-        const dividido = !!(q.imagen || (textoCompartido && textoCompartido.length > 220));
+        // El texto (corto o largo) siempre va a un lado, fijo; lo que
+        // cambia al pasar de pregunta es solo el lado de la pregunta.
+        const dividido = !!(q.imagen || textoCompartido);
         const grupoTotal = q.texto_id ? sm.todas.filter(x => x.texto_id === q.texto_id).length : 0;
         const pills = `
           <div class="row question-box-pills" style="gap:0.5rem; margin-bottom:0.75rem;">
