@@ -78,35 +78,41 @@ function barajar(arr) {
   return a;
 }
 
+// Minimo de preguntas activas para mostrar un texto compartido como grupo,
+// usado solo para textos viejos que no tienen guardada su propia cantidad
+// planeada (creados antes de que el administrador pudiera indicarla al
+// crear el texto). Para los textos nuevos se usa la cantidad que el
+// administrador puso al crearlos (textos.cantidad_preguntas).
+const MINIMO_GRUPO_DEFECTO = 2;
+
 // Si alguna de las preguntas ya elegidas al azar pertenece a un texto
-// compartido que tiene, en total, 5 preguntas activas o mas, se completa el
-// grupo con las que falten para que el estudiante siempre vea la lectura
-// completa junto con todas sus preguntas (nunca una lectura "a medias"). Los
-// textos con menos de 5 preguntas activas todavia no se muestran como grupo
-// (sus preguntas se comportan como sueltas) mientras el banco no alcance el
-// minimo pedido.
+// compartido que ya alcanzo su cantidad de preguntas planeada (o, para
+// textos viejos, el minimo por defecto), se completa el grupo con las que
+// falten para que el estudiante siempre vea la lectura completa junto con
+// todas sus preguntas (nunca una lectura "a medias"). Un texto todavia
+// incompleto (le faltan preguntas por crear) no se muestra como grupo
+// mientras no llegue a esa cantidad.
 async function completarGrupos(preguntas) {
   const idsTexto = [...new Set(preguntas.filter((q) => q.texto_id).map((q) => q.texto_id))];
   if (!idsTexto.length) return { preguntas, textos: [] };
 
   const yaIncluidas = new Set(preguntas.map((q) => q.id));
   const resultado = preguntas.slice();
-  const gruposValidos = [];
+  const textosValidos = [];
   for (const textoId of idsTexto) {
+    const texto = await db.get('SELECT * FROM textos WHERE id = ?', [textoId]);
+    if (!texto) continue;
     const miembros = await db.all('SELECT * FROM questions WHERE texto_id = ? AND activo = 1', [textoId]);
-    if (miembros.length >= 5) {
-      gruposValidos.push(textoId);
+    const requerido = texto.cantidad_preguntas || MINIMO_GRUPO_DEFECTO;
+    if (miembros.length >= requerido) {
+      textosValidos.push(texto);
       for (const m of miembros) {
         if (!yaIncluidas.has(m.id)) { resultado.push(m); yaIncluidas.add(m.id); }
       }
     }
   }
 
-  let textos = [];
-  if (gruposValidos.length) {
-    const placeholders = gruposValidos.map(() => '?').join(',');
-    textos = await db.all(`SELECT id, contenido FROM textos WHERE id IN (${placeholders})`, gruposValidos);
-  }
+  const textos = textosValidos.map((t) => ({ id: t.id, contenido: t.contenido }));
   return { preguntas: barajarConservandoGrupos(resultado), textos };
 }
 
@@ -228,7 +234,7 @@ router.get('/textos', requireAdmin, asyncHandler(async (req, res) => {
   if (MATERIAS.includes(materia)) { condiciones.push('t.materia = ?'); params.push(materia); }
   const where = condiciones.length ? 'WHERE ' + condiciones.join(' AND ') : '';
   const textos = await db.all(`
-    SELECT t.id, t.materia, t.contenido, t.created_at,
+    SELECT t.id, t.materia, t.contenido, t.cantidad_preguntas, t.created_at,
       (SELECT COUNT(*) FROM questions q WHERE q.texto_id = t.id AND q.activo = 1) as num_preguntas
     FROM textos t ${where} ORDER BY t.created_at DESC
   `, params);
@@ -238,11 +244,25 @@ router.get('/textos', requireAdmin, asyncHandler(async (req, res) => {
 router.post('/textos', requireAdmin, asyncHandler(async (req, res) => {
   const materia = MATERIAS.includes(req.body && req.body.materia) ? req.body.materia : null;
   const contenido = req.body && req.body.contenido ? String(req.body.contenido).trim() : '';
+  // Opcional: cuantas preguntas va a tener este texto en total. La usa el
+  // modal "Crear texto con varias preguntas" para saber cuantos formularios
+  // mostrar de una vez y para que completarGrupos() (ver arriba) sepa cuando
+  // el grupo ya esta completo. El flujo viejo (crear el texto al vuelo desde
+  // una sola pregunta) no la manda, y el texto queda con cantidad_preguntas
+  // en null (usa el minimo por defecto).
+  let cantidadPreguntas = null;
+  if (req.body && req.body.cantidad_preguntas !== undefined && req.body.cantidad_preguntas !== null && req.body.cantidad_preguntas !== '') {
+    const n = Number(req.body.cantidad_preguntas);
+    if (!Number.isInteger(n) || n < 2 || n > 10) {
+      return res.status(400).json({ error: 'La cantidad de preguntas debe ser un numero entero entre 2 y 10.' });
+    }
+    cantidadPreguntas = n;
+  }
   if (!materia) return res.status(400).json({ error: 'Selecciona una materia valida para el texto.' });
   if (!contenido) return res.status(400).json({ error: 'El contenido del texto es obligatorio.' });
   const info = await db.run(
-    'INSERT INTO textos (materia, contenido, created_by) VALUES (?, ?, ?)',
-    [materia, contenido, req.user.id]
+    'INSERT INTO textos (materia, contenido, cantidad_preguntas, created_by) VALUES (?, ?, ?, ?)',
+    [materia, contenido, cantidadPreguntas, req.user.id]
   );
   const texto = await db.get('SELECT * FROM textos WHERE id = ?', [info.lastInsertRowid]);
   res.status(201).json({ texto });

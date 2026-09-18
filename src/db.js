@@ -215,7 +215,15 @@ async function migrateColumns() {
     { table: 'exam_sessions', column: 'eje', ddl: 'ALTER TABLE exam_sessions ADD COLUMN eje TEXT' },
     { table: 'exam_sessions', column: 'materias', ddl: 'ALTER TABLE exam_sessions ADD COLUMN materias TEXT' },
     { table: 'questions', column: 'texto_id', ddl: 'ALTER TABLE questions ADD COLUMN texto_id INTEGER REFERENCES textos(id)' },
-    { table: 'users', column: 'colegio_id', ddl: 'ALTER TABLE users ADD COLUMN colegio_id INTEGER REFERENCES colegios(id)' }
+    { table: 'users', column: 'colegio_id', ddl: 'ALTER TABLE users ADD COLUMN colegio_id INTEGER REFERENCES colegios(id)' },
+    // Cuantas preguntas se planearon para este texto compartido al crearlo
+    // (el administrador ahora la indica de una vez, ver POST /questions/textos
+    // y el modal "Crear texto con varias preguntas"). Se usa para decidir
+    // cuando un grupo de preguntas ya esta completo y se debe mostrar junto
+    // al estudiante; los textos viejos, creados antes de este cambio, quedan
+    // en NULL y usan un minimo por defecto (ver MINIMO_GRUPO_DEFECTO en
+    // routes/questions.js).
+    { table: 'textos', column: 'cantidad_preguntas', ddl: 'ALTER TABLE textos ADD COLUMN cantidad_preguntas INTEGER' }
   ];
   for (const { table, column, ddl } of migrations) {
     const cols = await all(`PRAGMA table_info(${table})`);

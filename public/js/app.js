@@ -729,7 +729,10 @@
               ${opcionesEje}
             </select>
           </div>
-          <button id="btn-nueva-pregunta" class="btn btn-primary">+ Agregar pregunta</button>
+          <div class="row" style="gap:0.5rem;">
+            <button id="btn-nuevo-texto" class="btn btn-secondary">+ Crear texto con varias preguntas</button>
+            <button id="btn-nueva-pregunta" class="btn btn-primary">+ Agregar pregunta</button>
+          </div>
         </div>
         <div class="table-wrap">
           <table>
@@ -747,6 +750,7 @@
     el('filtro-competencia').onchange = (e) => { a.filtroCompetencia = e.target.value; loadAdminPreguntas(); };
     el('filtro-eje').onchange = (e) => { a.filtroEje = e.target.value; loadAdminPreguntas(); };
     el('btn-nueva-pregunta').onclick = () => { a.modal = { modo: 'crear', pregunta: null }; a.modalError = ''; render(); };
+    el('btn-nuevo-texto').onclick = () => renderModalTextoMultiple();
 
     app().querySelectorAll('[data-ver]').forEach(btn => {
       btn.onclick = async () => {
@@ -867,7 +871,7 @@
             <label>Texto compartido (opcional)</label>
             <select id="input-texto-select"></select>
             <input type="hidden" name="texto_id" id="input-texto-id" value="${p.texto_id || ''}" />
-            <div class="hint">Se usa cuando varias preguntas comparten la misma lectura (minimo 5 preguntas para que el estudiante las vea juntas bajo un mismo texto). Elige uno existente para agregarle esta pregunta, o crea uno nuevo a partir del texto base de arriba.</div>
+            <div class="hint">Se usa cuando varias preguntas comparten la misma lectura. Elige uno existente para agregarle esta pregunta, o crea uno nuevo a partir del texto base de arriba. Para crear un texto con todas sus preguntas de una vez, usa el boton "+ Crear texto con varias preguntas".</div>
           </div>
           <div class="field">
             <label>Enunciado de la pregunta</label>
@@ -927,7 +931,7 @@
       const data = await api('/questions/textos?materia=' + materiaActual);
       const opciones = data.textos.map(t => `
         <option value="${t.id}" ${String(textoIdPrevio) === String(t.id) ? 'selected' : ''}>
-          #${t.id} (${t.num_preguntas} preg.) &middot; ${escapeHtml(t.contenido.slice(0, 60))}${t.contenido.length > 60 ? '&hellip;' : ''}
+          #${t.id} (${t.num_preguntas}${t.cantidad_preguntas ? '/' + t.cantidad_preguntas : ''} preg.) &middot; ${escapeHtml(t.contenido.slice(0, 60))}${t.contenido.length > 60 ? '&hellip;' : ''}
         </option>
       `).join('');
       el('input-texto-select').innerHTML = `
@@ -1032,6 +1036,195 @@
         render();
       }
     };
+  }
+
+  // Modal para crear un texto compartido junto con todas sus preguntas de
+  // una sola vez: el administrador indica cuantas preguntas va a tener y en
+  // el segundo paso se abre un formulario por cada una, en vez de tener que
+  // crear el texto y luego agregarle las preguntas una por una. Es un modal
+  // aparte (no usa el estado "a.modal" del modal de una sola pregunta) para
+  // no mezclar los dos flujos.
+  function renderModalTextoMultiple() {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    document.body.appendChild(backdrop);
+    const close = () => backdrop.remove();
+
+    function pintarPaso1(previo) {
+      const v = previo || { materia: 'matematicas', contenido: '', cantidad: 3 };
+      backdrop.innerHTML = `
+        <div class="modal">
+          <div class="modal-header">
+            <h2 class="mb-0">Crear texto con varias preguntas</h2>
+            <button class="modal-close" id="tm-cerrar">&times;</button>
+          </div>
+          <p class="hint" style="margin-top:-0.4rem; margin-bottom:1rem;">
+            Escribe la lectura una sola vez e indica cuantas preguntas la acompanan. En el siguiente paso se abre un formulario para cada pregunta, y al guardar quedan todas juntas bajo ese mismo texto.
+          </p>
+          <div id="tm-error"></div>
+          <form id="form-texto-config" class="stack">
+            <div class="field">
+              <label>Materia</label>
+              <select name="materia" id="tm-materia" required>
+                <option value="lectura_critica" ${v.materia === 'lectura_critica' ? 'selected' : ''}>Lectura Critica</option>
+                <option value="matematicas" ${v.materia === 'matematicas' ? 'selected' : ''}>Matematicas</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Texto / lectura compartida</label>
+              <textarea name="contenido" id="tm-contenido" required style="min-height:160px;">${escapeHtml(v.contenido)}</textarea>
+            </div>
+            <div class="field">
+              <label>Cantidad de preguntas</label>
+              <input type="number" name="cantidad" id="tm-cantidad" min="2" max="10" value="${v.cantidad}" required />
+              <div class="hint">Entre 2 y 10. El estudiante siempre vera esta cantidad de preguntas juntas, seguidas del texto.</div>
+            </div>
+            <div class="row end" style="gap:0.5rem;">
+              <button type="button" class="btn btn-outline" id="tm-cancelar">Cancelar</button>
+              <button type="submit" class="btn btn-primary">Continuar &rarr;</button>
+            </div>
+          </form>
+        </div>
+      `;
+      el('tm-cerrar').onclick = close;
+      el('tm-cancelar').onclick = close;
+      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+      el('form-texto-config').onsubmit = (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const materia = fd.get('materia');
+        const contenido = String(fd.get('contenido') || '').trim();
+        const cantidad = Math.min(10, Math.max(2, Number(fd.get('cantidad')) || 3));
+        if (!contenido) {
+          document.getElementById('tm-error').innerHTML = '<div class="error-box">Escribe el texto compartido.</div>';
+          return;
+        }
+        pintarPaso2({ materia, contenido, cantidad });
+      };
+    }
+
+    function pintarPaso2({ materia, contenido, cantidad }) {
+      // El texto y cada pregunta se crean con la API que ya existe (una
+      // pregunta a la vez), pero desde aca se mandan todas seguidas: primero
+      // se crea el texto, y despues cada pregunta con ese texto_id. Si algo
+      // falla a mitad de camino, se recuerda que ya se creo (textoIdCreado)
+      // y cuales preguntas ya quedaron guardadas (creadas), para que al
+      // corregir el error y volver a enviar no se dupliquen ni el texto ni
+      // las preguntas que ya se habian guardado.
+      let textoIdCreado = null;
+      const creadas = new Array(cantidad).fill(false);
+
+      const bloquesPreguntas = Array.from({ length: cantidad }).map((_, i) => `
+        <div class="card" style="margin-bottom:1rem;">
+          <h3 style="font-size:1rem;">Pregunta ${i + 1} de ${cantidad}</h3>
+          <div class="grid-2">
+            <div class="field">
+              <label>Competencia (Icfes)</label>
+              <select name="competencia_${i}" required>
+                ${COMPETENCIAS_POR_MATERIA[materia].map((c) => `<option value="${c}">${competenciaLabel(c)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field">
+              <label>Eje tematico</label>
+              <select name="eje_${i}" required>
+                ${EJES_POR_MATERIA[materia].map((j) => `<option value="${j}">${ejeLabel(j)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Enunciado de la pregunta</label>
+            <textarea name="enunciado_${i}" required></textarea>
+          </div>
+          <div class="grid-2">
+            ${LETRAS.map((l) => `
+              <div class="field">
+                <label>Opcion ${l.toUpperCase()}</label>
+                <input type="text" name="opcion_${l}_${i}" required />
+              </div>
+            `).join('')}
+          </div>
+          <div class="field">
+            <label>Respuesta correcta</label>
+            <select name="respuesta_correcta_${i}" required>
+              ${LETRAS.map((l) => `<option value="${l}">Opcion ${l.toUpperCase()}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Explicacion (opcional)</label>
+            <textarea name="explicacion_${i}"></textarea>
+          </div>
+        </div>
+      `).join('');
+
+      backdrop.innerHTML = `
+        <div class="modal modal-wide">
+          <div class="modal-header">
+            <h2 class="mb-0">Preguntas del texto (${cantidad})</h2>
+            <button class="modal-close" id="tm-cerrar">&times;</button>
+          </div>
+          <div class="texto-grupo-aviso" style="margin-bottom:1rem;">${escapeHtml(contenido.slice(0, 240))}${contenido.length > 240 ? '&hellip;' : ''}</div>
+          <div id="tm-error"></div>
+          <form id="form-texto-preguntas" class="stack">
+            ${bloquesPreguntas}
+            <div class="row between" style="gap:0.5rem;">
+              <button type="button" class="btn btn-outline" id="tm-volver">&larr; Volver</button>
+              <button type="submit" class="btn btn-primary">Guardar texto y ${cantidad} preguntas</button>
+            </div>
+          </form>
+        </div>
+      `;
+      el('tm-cerrar').onclick = close;
+      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+      el('tm-volver').onclick = () => pintarPaso1({ materia, contenido, cantidad });
+
+      el('form-texto-preguntas').onsubmit = async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const errorBox = document.getElementById('tm-error');
+        errorBox.innerHTML = '';
+        const submitBtn = ev.target.querySelector('button[type=submit]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Guardando...';
+        try {
+          if (!textoIdCreado) {
+            const dataTexto = await api('/questions/textos', {
+              method: 'POST',
+              body: { materia, contenido, cantidad_preguntas: cantidad }
+            });
+            textoIdCreado = dataTexto.texto.id;
+          }
+          for (let i = 0; i < cantidad; i++) {
+            if (creadas[i]) continue;
+            await api('/questions', {
+              method: 'POST',
+              body: {
+                materia,
+                competencia: fd.get(`competencia_${i}`),
+                eje: fd.get(`eje_${i}`),
+                texto_id: textoIdCreado,
+                enunciado: fd.get(`enunciado_${i}`),
+                opcion_a: fd.get(`opcion_a_${i}`),
+                opcion_b: fd.get(`opcion_b_${i}`),
+                opcion_c: fd.get(`opcion_c_${i}`),
+                opcion_d: fd.get(`opcion_d_${i}`),
+                respuesta_correcta: fd.get(`respuesta_correcta_${i}`),
+                explicacion: fd.get(`explicacion_${i}`) || null
+              }
+            });
+            creadas[i] = true;
+          }
+          close();
+          loadAdminPreguntas();
+        } catch (err) {
+          const faltan = creadas.filter((c) => !c).length;
+          errorBox.innerHTML = `<div class="error-box">${escapeHtml(err.message)}. Ya se guardaron ${cantidad - faltan} de ${cantidad} preguntas; corrige la que fallo y presiona "Guardar" de nuevo para completar las que faltan (no se duplican las que ya quedaron guardadas).</div>`;
+          submitBtn.disabled = false;
+          submitBtn.textContent = `Guardar texto y ${cantidad} preguntas`;
+        }
+      };
+    }
+
+    pintarPaso1();
   }
 
   /* ---------- Admin: estudiantes ---------- */
@@ -1564,7 +1757,7 @@
     const dividido = !!(q.imagen || (textoCompartido && textoCompartido.length > 220));
     const grupoTotal = q.texto_id ? pr.preguntas.filter(x => x.texto_id === q.texto_id).length : 0;
     const bloqueFuente = (textoCompartido || q.imagen) ? `
-        ${grupoTotal >= 5 ? `<div class="texto-grupo-aviso">Responde las siguientes ${grupoTotal} preguntas con el texto presentado.</div>` : ''}
+        ${(q.texto_id && textoCompartido) ? `<div class="texto-grupo-aviso">Responde las siguientes ${grupoTotal} preguntas con el texto presentado.</div>` : ''}
         ${textoCompartido ? `<div class="texto-base">${escapeHtml(textoCompartido)}</div>` : ''}
         ${q.imagen ? `<img class="pregunta-img" src="${q.imagen}" alt="Imagen de la pregunta" />` : ''}
     ` : '';
@@ -1773,7 +1966,7 @@
           </div>
         `;
         const bloqueFuente = (textoCompartido || q.imagen) ? `
-          ${grupoTotal >= 5 ? `<div class="texto-grupo-aviso">Responde las siguientes ${grupoTotal} preguntas con el texto presentado.</div>` : ''}
+          ${(q.texto_id && textoCompartido) ? `<div class="texto-grupo-aviso">Responde las siguientes ${grupoTotal} preguntas con el texto presentado.</div>` : ''}
           ${textoCompartido ? `<div class="texto-base">${escapeHtml(textoCompartido)}</div>` : ''}
           ${q.imagen ? `<img class="pregunta-img" src="${q.imagen}" alt="Imagen de la pregunta" />` : ''}
         ` : '';
