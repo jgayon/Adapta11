@@ -333,14 +333,7 @@
       // tiempo, perdiendo el foco y lo que se hubiera escrito).
       if (!state.colegiosCargados) loadColegiosPublicos();
       el('form-registro').onsubmit = onSubmitRegistro;
-      // Ademas de la carga inicial, se refresca la lista cada vez que el
-      // estudiante entra al campo de colegio. Asi, si el administrador creo
-      // un colegio nuevo despues de que esta pagina ya estaba abierta, no
-      // hace falta recargar el navegador para que aparezca como sugerencia:
-      // solo se actualiza el <datalist> (nunca el resto del formulario), asi
-      // que no se pierde el foco ni lo que ya se escribio.
-      const colegioInput = document.querySelector('#form-registro input[name="colegio"]');
-      if (colegioInput) colegioInput.addEventListener('focus', refrescarListaColegios);
+      inicializarAutocompleteColegio();
     }
   }
 
@@ -348,7 +341,7 @@
     try {
       const data = await api('/colegios');
       state.colegiosDisponibles = data.colegios;
-    } catch (e) { /* si falla, el select queda vacio y se avisa al enviar */ }
+    } catch (e) { /* si falla, la lista queda vacia y se avisa al enviar */ }
     state.colegiosCargados = true;
     if (state.view === 'auth' && state.authTab === 'registro') render();
   }
@@ -358,12 +351,74 @@
       const data = await api('/colegios');
       state.colegiosDisponibles = data.colegios;
       state.colegiosCargados = true;
-      const datalist = document.getElementById('lista-colegios');
-      if (datalist) {
-        datalist.innerHTML = state.colegiosDisponibles
-          .map(c => `<option value="${escapeHtml(c.nombre)}"></option>`).join('');
-      }
     } catch (e) { /* si falla se deja la lista que ya habia cargada */ }
+  }
+
+  // Dibuja las sugerencias del campo "Colegio" en un <ul> propio en vez de
+  // usar el <datalist> nativo del navegador: en algunos navegadores/equipos
+  // ese menu nativo no llegaba a mostrarse aunque los colegios si estuvieran
+  // guardados (se confirmo consultando /api/colegios directamente), asi que
+  // ahora la propia app dibuja y controla la lista, que siempre se ve igual
+  // sin depender de como cada navegador implemente el datalist.
+  function renderSugerenciasColegio(filtro) {
+    const ul = document.getElementById('colegio-sugerencias');
+    if (!ul) return;
+    const texto = (filtro || '').trim();
+    const textoLower = texto.toLowerCase();
+    const coincidencias = texto
+      ? state.colegiosDisponibles.filter((c) => c.nombre.toLowerCase().includes(textoLower))
+      : state.colegiosDisponibles;
+    const hayExacto = coincidencias.some((c) => c.nombre.toLowerCase() === textoLower);
+
+    let html = coincidencias
+      .slice(0, 30)
+      .map((c) => `<li class="autocomplete-item" data-nombre="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</li>`)
+      .join('');
+
+    if (texto && !hayExacto) {
+      html += `<li class="autocomplete-item autocomplete-item-nuevo" data-nombre="${escapeHtml(texto)}">+ Crear colegio nuevo: &quot;${escapeHtml(texto)}&quot;</li>`;
+    }
+
+    if (!html) {
+      html = `<li class="autocomplete-empty">Escribe el nombre de tu colegio para buscarlo o crearlo.</li>`;
+    }
+
+    ul.innerHTML = html;
+    ul.hidden = false;
+  }
+
+  function inicializarAutocompleteColegio() {
+    const input = document.getElementById('input-colegio');
+    const lista = document.getElementById('colegio-sugerencias');
+    if (!input || !lista) return;
+
+    input.addEventListener('focus', async () => {
+      renderSugerenciasColegio(input.value);
+      // Ademas de la carga inicial, se refresca la lista cada vez que el
+      // estudiante entra al campo de colegio. Asi, si el administrador creo
+      // un colegio nuevo despues de que esta pagina ya estaba abierta, no
+      // hace falta recargar el navegador para que aparezca como sugerencia.
+      await refrescarListaColegios();
+      renderSugerenciasColegio(input.value);
+    });
+    input.addEventListener('input', () => renderSugerenciasColegio(input.value));
+    input.addEventListener('blur', () => {
+      // Retraso para que un click en una sugerencia (ver mousedown abajo)
+      // alcance a aplicarse antes de ocultar la lista.
+      setTimeout(() => { lista.hidden = true; }, 150);
+    });
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') lista.hidden = true;
+    });
+    lista.addEventListener('mousedown', (ev) => {
+      const item = ev.target.closest('.autocomplete-item[data-nombre]');
+      if (!item) return;
+      // preventDefault en mousedown (no click) evita que el input pierda el
+      // foco antes de que se alcance a fijar el valor elegido.
+      ev.preventDefault();
+      input.value = item.getAttribute('data-nombre');
+      lista.hidden = true;
+    });
   }
 
   function formLogin() {
@@ -383,12 +438,14 @@
   }
 
   function formRegistro() {
-    // Campo de busqueda con autocompletado (datalist nativo): el estudiante
-    // escribe y ve sugerencias de colegios ya existentes; si el suyo no
-    // aparece, puede escribir el nombre completo y el servidor lo crea
-    // automaticamente al registrarse (ver POST /auth/register).
-    const opcionesColegio = state.colegiosDisponibles
-      .map(c => `<option value="${escapeHtml(c.nombre)}"></option>`).join('');
+    // Campo de busqueda con autocompletado propio (no datalist nativo): en
+    // algunos navegadores el menu de sugerencias del <datalist> no llegaba a
+    // mostrarse aunque los colegios si estuvieran guardados, asi que la
+    // propia app dibuja la lista de sugerencias debajo del campo (ver
+    // inicializarAutocompleteColegio/renderSugerenciasColegio). Si lo que se
+    // escribe no coincide con ningun colegio existente, aparece la opcion de
+    // crearlo con ese nombre (el servidor lo crea automaticamente al
+    // registrarse, ver POST /auth/register).
     return `
       <form id="form-registro" class="stack">
         <div class="field">
@@ -401,12 +458,14 @@
         </div>
         <div class="field">
           <label>Colegio</label>
-          <input
-            type="text" name="colegio" required autocomplete="off" list="lista-colegios"
-            placeholder="${!state.colegiosCargados ? 'Cargando colegios...' : 'Busca tu colegio...'}"
-          />
-          <datalist id="lista-colegios">${opcionesColegio}</datalist>
-          <div class="hint">Escribe para buscarlo. Si no aparece en la lista, escribe el nombre completo de tu colegio y se creará automáticamente.</div>
+          <div class="autocomplete" id="colegio-autocomplete">
+            <input
+              type="text" name="colegio" id="input-colegio" required autocomplete="off"
+              placeholder="${!state.colegiosCargados ? 'Cargando colegios...' : 'Busca tu colegio...'}"
+            />
+            <ul class="autocomplete-list" id="colegio-sugerencias" hidden></ul>
+          </div>
+          <div class="hint">Escribe para buscarlo. Si no aparece en la lista, elige la opción para crearlo con ese nombre.</div>
         </div>
         <div class="field">
           <label>Correo electrónico</label>

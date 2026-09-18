@@ -351,6 +351,43 @@ textarea { min-height: 90px; resize: vertical; }
 
 .hint { color: var(--text-muted); font-size: 0.82rem; }
 
+/* ---------- Autocompletado propio (campo "Colegio" del registro) ---------- */
+/* Reemplaza el <datalist> nativo, cuyo menu de sugerencias no se llegaba a
+   ver en algunos navegadores aunque los datos si estuvieran cargados. */
+.autocomplete { position: relative; }
+.autocomplete-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  max-height: 230px;
+  overflow-y: auto;
+}
+.autocomplete-item {
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+.autocomplete-item:hover { background: var(--primary-soft); }
+.autocomplete-item-nuevo {
+  margin-top: 4px;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  color: var(--primary-dark);
+  font-weight: 600;
+}
+.autocomplete-empty { padding: 0.5rem 0.65rem; color: var(--text-muted); font-size: 0.88rem; cursor: default; }
+
 /* ---------- Auth (pantalla dividida) ---------- */
 
 .auth-shell {
