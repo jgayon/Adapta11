@@ -81,35 +81,56 @@ function barajar(arr) {
 // Minimo de preguntas activas para mostrar un texto compartido como grupo,
 // usado solo para textos viejos que no tienen guardada su propia cantidad
 // planeada (creados antes de que el administrador pudiera indicarla al
-// crear el texto). Para los textos nuevos se usa la cantidad que el
-// administrador puso al crearlos (textos.cantidad_preguntas).
+// crear el texto).
 const MINIMO_GRUPO_DEFECTO = 2;
 
+// Cuantas preguntas de un texto se le muestran juntas al estudiante en cada
+// intento: la que el administrador guardo en textos.preguntas_por_grupo, o
+// si no la puso, la cantidad total de preguntas del texto (comportamiento
+// viejo: se mostraban todas), o el minimo por defecto si tampoco hay eso
+// guardado (textos muy viejos).
+function objetivoGrupo(texto) {
+  return texto.preguntas_por_grupo || texto.cantidad_preguntas || MINIMO_GRUPO_DEFECTO;
+}
+
 // Si alguna de las preguntas ya elegidas al azar pertenece a un texto
-// compartido que ya alcanzo su cantidad de preguntas planeada (o, para
-// textos viejos, el minimo por defecto), se completa el grupo con las que
-// falten para que el estudiante siempre vea la lectura completa junto con
-// todas sus preguntas (nunca una lectura "a medias"). Un texto todavia
-// incompleto (le faltan preguntas por crear) no se muestra como grupo
-// mientras no llegue a esa cantidad.
+// compartido que ya tiene preguntas activas suficientes (ver objetivoGrupo),
+// se arma el grupo que se le muestra al estudiante: un subconjunto al azar
+// del banco de ese texto, del tamano indicado por el administrador (por
+// ejemplo, el texto puede tener 5 preguntas creadas pero mostrarse solo con
+// 3 cada vez, distintas en cada intento). Las preguntas que ya habian salido
+// en el sorteo original se aprovechan primero; si faltan, se completan al
+// azar con el resto del banco del texto. Un texto que todavia no alcanza su
+// objetivo (le faltan preguntas por crear) no se muestra como grupo.
 async function completarGrupos(preguntas) {
   const idsTexto = [...new Set(preguntas.filter((q) => q.texto_id).map((q) => q.texto_id))];
   if (!idsTexto.length) return { preguntas, textos: [] };
 
-  const yaIncluidas = new Set(preguntas.map((q) => q.id));
-  const resultado = preguntas.slice();
+  const resultado = preguntas.filter((q) => !q.texto_id);
   const textosValidos = [];
   for (const textoId of idsTexto) {
     const texto = await db.get('SELECT * FROM textos WHERE id = ?', [textoId]);
     if (!texto) continue;
     const miembros = await db.all('SELECT * FROM questions WHERE texto_id = ? AND activo = 1', [textoId]);
-    const requerido = texto.cantidad_preguntas || MINIMO_GRUPO_DEFECTO;
-    if (miembros.length >= requerido) {
-      textosValidos.push(texto);
-      for (const m of miembros) {
-        if (!yaIncluidas.has(m.id)) { resultado.push(m); yaIncluidas.add(m.id); }
-      }
+    // Todavia no hay suficientes preguntas activas para completar ni un solo
+    // grupo del tamano pedido: el texto no se muestra como grupo mientras no
+    // se alcance esa cantidad.
+    if (miembros.length < objetivoGrupo(texto)) continue;
+    const objetivo = objetivoGrupo(texto);
+
+    const yaElegidas = preguntas.filter((q) => q.texto_id === textoId);
+    const idsYaElegidas = new Set(yaElegidas.map((q) => q.id));
+    let grupoFinal;
+    if (yaElegidas.length >= objetivo) {
+      grupoFinal = barajar(yaElegidas).slice(0, objetivo);
+    } else {
+      const restantes = miembros.filter((m) => !idsYaElegidas.has(m.id));
+      const faltan = objetivo - yaElegidas.length;
+      grupoFinal = [...yaElegidas, ...barajar(restantes).slice(0, faltan)];
     }
+
+    textosValidos.push(texto);
+    resultado.push(...grupoFinal);
   }
 
   const textos = textosValidos.map((t) => ({ id: t.id, contenido: t.contenido }));
@@ -234,7 +255,7 @@ router.get('/textos', requireAdmin, asyncHandler(async (req, res) => {
   if (MATERIAS.includes(materia)) { condiciones.push('t.materia = ?'); params.push(materia); }
   const where = condiciones.length ? 'WHERE ' + condiciones.join(' AND ') : '';
   const textos = await db.all(`
-    SELECT t.id, t.materia, t.contenido, t.cantidad_preguntas, t.created_at,
+    SELECT t.id, t.materia, t.contenido, t.cantidad_preguntas, t.preguntas_por_grupo, t.created_at,
       (SELECT COUNT(*) FROM questions q WHERE q.texto_id = t.id AND q.activo = 1) as num_preguntas
     FROM textos t ${where} ORDER BY t.created_at DESC
   `, params);
@@ -258,11 +279,26 @@ router.post('/textos', requireAdmin, asyncHandler(async (req, res) => {
     }
     cantidadPreguntas = n;
   }
+  // Opcional: cuantas de esas preguntas se le muestran juntas al estudiante
+  // en cada intento (puede ser menor que cantidad_preguntas, para armar un
+  // banco mas grande del que se toma un subconjunto al azar cada vez). Si no
+  // se manda, se usa cantidad_preguntas completa (o el minimo por defecto).
+  let preguntasPorGrupo = null;
+  if (req.body && req.body.preguntas_por_grupo !== undefined && req.body.preguntas_por_grupo !== null && req.body.preguntas_por_grupo !== '') {
+    const n = Number(req.body.preguntas_por_grupo);
+    if (!Number.isInteger(n) || n < 2) {
+      return res.status(400).json({ error: 'La cantidad de preguntas que se muestran juntas debe ser un numero entero de al menos 2.' });
+    }
+    if (cantidadPreguntas && n > cantidadPreguntas) {
+      return res.status(400).json({ error: 'La cantidad de preguntas que se muestran juntas no puede ser mayor que el total de preguntas del texto.' });
+    }
+    preguntasPorGrupo = n;
+  }
   if (!materia) return res.status(400).json({ error: 'Selecciona una materia valida para el texto.' });
   if (!contenido) return res.status(400).json({ error: 'El contenido del texto es obligatorio.' });
   const info = await db.run(
-    'INSERT INTO textos (materia, contenido, cantidad_preguntas, created_by) VALUES (?, ?, ?, ?)',
-    [materia, contenido, cantidadPreguntas, req.user.id]
+    'INSERT INTO textos (materia, contenido, cantidad_preguntas, preguntas_por_grupo, created_by) VALUES (?, ?, ?, ?, ?)',
+    [materia, contenido, cantidadPreguntas, preguntasPorGrupo, req.user.id]
   );
   const texto = await db.get('SELECT * FROM textos WHERE id = ?', [info.lastInsertRowid]);
   res.status(201).json({ texto });

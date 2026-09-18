@@ -223,7 +223,13 @@ async function migrateColumns() {
     // al estudiante; los textos viejos, creados antes de este cambio, quedan
     // en NULL y usan un minimo por defecto (ver MINIMO_GRUPO_DEFECTO en
     // routes/questions.js).
-    { table: 'textos', column: 'cantidad_preguntas', ddl: 'ALTER TABLE textos ADD COLUMN cantidad_preguntas INTEGER' }
+    { table: 'textos', column: 'cantidad_preguntas', ddl: 'ALTER TABLE textos ADD COLUMN cantidad_preguntas INTEGER' },
+    // Cuantas de esas preguntas se le muestran juntas al estudiante en cada
+    // intento (puede ser menos que cantidad_preguntas: por ejemplo, un texto
+    // con 5 preguntas creadas puede mostrarse con solo 3 cada vez, elegidas
+    // al azar, distintas en cada intento). Ver objetivoGrupo() en
+    // routes/questions.js.
+    { table: 'textos', column: 'preguntas_por_grupo', ddl: 'ALTER TABLE textos ADD COLUMN preguntas_por_grupo INTEGER' }
   ];
   for (const { table, column, ddl } of migrations) {
     const cols = await all(`PRAGMA table_info(${table})`);

@@ -932,7 +932,7 @@
       const data = await api('/questions/textos?materia=' + materiaActual);
       const opciones = data.textos.map(t => `
         <option value="${t.id}" ${String(textoIdPrevio) === String(t.id) ? 'selected' : ''}>
-          #${t.id} (${t.num_preguntas}${t.cantidad_preguntas ? '/' + t.cantidad_preguntas : ''} preg.) &middot; ${escapeHtml(t.contenido.slice(0, 60))}${t.contenido.length > 60 ? '&hellip;' : ''}
+          #${t.id} (${t.num_preguntas}${t.cantidad_preguntas ? '/' + t.cantidad_preguntas : ''} preg.${t.preguntas_por_grupo && t.cantidad_preguntas && t.preguntas_por_grupo < t.cantidad_preguntas ? ', muestra ' + t.preguntas_por_grupo : ''}) &middot; ${escapeHtml(t.contenido.slice(0, 60))}${t.contenido.length > 60 ? '&hellip;' : ''}
         </option>
       `).join('');
       el('input-texto-select').innerHTML = `
@@ -1052,7 +1052,7 @@
     const close = () => backdrop.remove();
 
     function pintarPaso1(previo) {
-      const v = previo || { materia: 'matematicas', contenido: '', cantidad: 3 };
+      const v = previo || { materia: 'matematicas', contenido: '', cantidad: 3, mostrar: 3 };
       backdrop.innerHTML = `
         <div class="modal">
           <div class="modal-header">
@@ -1075,10 +1075,17 @@
               <label>Texto / lectura compartida</label>
               <textarea name="contenido" id="tm-contenido" required style="min-height:160px;">${escapeHtml(v.contenido)}</textarea>
             </div>
-            <div class="field">
-              <label>Cantidad de preguntas</label>
-              <input type="number" name="cantidad" id="tm-cantidad" min="2" max="10" value="${v.cantidad}" required />
-              <div class="hint">Entre 2 y 10. El estudiante siempre vera esta cantidad de preguntas juntas, seguidas del texto.</div>
+            <div class="grid-2">
+              <div class="field">
+                <label>Cantidad de preguntas a crear</label>
+                <input type="number" name="cantidad" id="tm-cantidad" min="2" max="10" value="${v.cantidad}" required />
+                <div class="hint">Entre 2 y 10. Es el banco total de preguntas de este texto.</div>
+              </div>
+              <div class="field">
+                <label>Cuantas se le muestran juntas al estudiante</label>
+                <input type="number" name="mostrar" id="tm-mostrar" min="2" max="${v.cantidad}" value="${v.mostrar}" required />
+                <div class="hint">Puede ser menos que el total. Si creas 5 y pones 3 aca, cada intento toma 3 al azar de esas 5.</div>
+              </div>
             </div>
             <div class="row end" style="gap:0.5rem;">
               <button type="button" class="btn btn-outline" id="tm-cancelar">Cancelar</button>
@@ -1090,21 +1097,27 @@
       el('tm-cerrar').onclick = close;
       el('tm-cancelar').onclick = close;
       backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+      el('tm-cantidad').oninput = (e) => {
+        const max = Math.min(10, Math.max(2, Number(e.target.value) || 2));
+        el('tm-mostrar').max = max;
+        if (Number(el('tm-mostrar').value) > max) el('tm-mostrar').value = max;
+      };
       el('form-texto-config').onsubmit = (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
         const materia = fd.get('materia');
         const contenido = String(fd.get('contenido') || '').trim();
         const cantidad = Math.min(10, Math.max(2, Number(fd.get('cantidad')) || 3));
+        const mostrar = Math.min(cantidad, Math.max(2, Number(fd.get('mostrar')) || cantidad));
         if (!contenido) {
           document.getElementById('tm-error').innerHTML = '<div class="error-box">Escribe el texto compartido.</div>';
           return;
         }
-        pintarPaso2({ materia, contenido, cantidad });
+        pintarPaso2({ materia, contenido, cantidad, mostrar });
       };
     }
 
-    function pintarPaso2({ materia, contenido, cantidad }) {
+    function pintarPaso2({ materia, contenido, cantidad, mostrar }) {
       // El texto y cada pregunta se crean con la API que ya existe (una
       // pregunta a la vez), pero desde aca se mandan todas seguidas: primero
       // se crea el texto, y despues cada pregunta con ese texto_id. Si algo
@@ -1164,6 +1177,11 @@
             <button class="modal-close" id="tm-cerrar">&times;</button>
           </div>
           <div class="texto-grupo-aviso" style="margin-bottom:1rem;">${escapeHtml(contenido.slice(0, 240))}${contenido.length > 240 ? '&hellip;' : ''}</div>
+          <p class="hint" style="margin-top:-0.6rem; margin-bottom:1rem;">
+            ${mostrar < cantidad
+              ? `Se crean las ${cantidad} preguntas, pero cada intento del estudiante le muestra solo ${mostrar}, elegidas al azar entre las ${cantidad}.`
+              : `Se crean las ${cantidad} preguntas y el estudiante las vera todas juntas cada vez.`}
+          </p>
           <div id="tm-error"></div>
           <form id="form-texto-preguntas" class="stack">
             ${bloquesPreguntas}
@@ -1176,7 +1194,7 @@
       `;
       el('tm-cerrar').onclick = close;
       backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
-      el('tm-volver').onclick = () => pintarPaso1({ materia, contenido, cantidad });
+      el('tm-volver').onclick = () => pintarPaso1({ materia, contenido, cantidad, mostrar });
 
       el('form-texto-preguntas').onsubmit = async (ev) => {
         ev.preventDefault();
@@ -1190,7 +1208,7 @@
           if (!textoIdCreado) {
             const dataTexto = await api('/questions/textos', {
               method: 'POST',
-              body: { materia, contenido, cantidad_preguntas: cantidad }
+              body: { materia, contenido, cantidad_preguntas: cantidad, preguntas_por_grupo: mostrar }
             });
             textoIdCreado = dataTexto.texto.id;
           }
