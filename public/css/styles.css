@@ -77,6 +77,40 @@
   }
 }
 
+/* La pantalla de inicio de sesion / registro (y la de carga inicial) siempre
+   se ve en modo claro, sin importar el modo del sistema operativo: app.js le
+   agrega esta clase a <body> mientras state.view es 'auth' o 'cargando'.
+   Estos valores se declaran directamente sobre body, por lo que sustituyen
+   (para body y todo lo que cuelga de el) a los que la media query de arriba
+   reasigna en :root cuando el sistema esta en modo oscuro. */
+body.auth-light {
+  --bg: #fbf7ec;
+  --surface: #ffffff;
+  --surface-2: #f3ecda;
+  --text: #211f1a;
+  --text-muted: #5b5748;
+  --border: #e4dcc5;
+
+  --primary: #1b3a6b;
+  --primary-dark: #12294f;
+  --primary-light: #3b5f99;
+  --primary-soft: #e7eef7;
+
+  --accent: #0E9488;
+  --accent-light: #308569;
+  --accent-ink: #3a2b00;
+  --accent-dark: #0B7168;
+
+  --success: #16a34a;
+  --success-bg: #e2f8ea;
+  --warning: #7a5c06;
+  --warning-bg: #f6ecd3;
+  --danger: #c0392b;
+  --danger-bg: #fbeae8;
+
+  --shadow: 0 1px 3px rgba(24, 30, 58, 0.08), 0 8px 24px rgba(24, 30, 58, 0.06);
+}
+
 * { box-sizing: border-box; }
 
 html, body {

@@ -7,8 +7,11 @@ const { buscarColegioPorNombre } = require('../lib/colegios');
 const router = express.Router();
 
 // Publico: lista simple para el selector de colegio en el registro de
-// estudiantes (no requiere sesion iniciada).
+// estudiantes (no requiere sesion iniciada). "no-store" evita que el
+// navegador devuelva una copia en cache cuando un colegio se creo despues de
+// la primera visita a la pagina de registro.
 router.get('/', asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   const colegios = await db.all('SELECT id, nombre FROM colegios ORDER BY nombre');
   res.json({ colegios });
 }));

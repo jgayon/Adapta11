@@ -259,6 +259,9 @@
   /* ---------------------------------------------------------------- */
 
   function render() {
+    // La pantalla de inicio de sesion / registro siempre se ve en modo
+    // claro, sin importar si el sistema operativo esta en modo oscuro.
+    document.body.classList.toggle('auth-light', state.view === 'auth' || state.view === 'cargando');
     renderTopnav();
     if (state.view === 'cargando') {
       app().innerHTML = '<div class="loading">Cargando Ruta Saber...</div>';
@@ -330,6 +333,14 @@
       // tiempo, perdiendo el foco y lo que se hubiera escrito).
       if (!state.colegiosCargados) loadColegiosPublicos();
       el('form-registro').onsubmit = onSubmitRegistro;
+      // Ademas de la carga inicial, se refresca la lista cada vez que el
+      // estudiante entra al campo de colegio. Asi, si el administrador creo
+      // un colegio nuevo despues de que esta pagina ya estaba abierta, no
+      // hace falta recargar el navegador para que aparezca como sugerencia:
+      // solo se actualiza el <datalist> (nunca el resto del formulario), asi
+      // que no se pierde el foco ni lo que ya se escribio.
+      const colegioInput = document.querySelector('#form-registro input[name="colegio"]');
+      if (colegioInput) colegioInput.addEventListener('focus', refrescarListaColegios);
     }
   }
 
@@ -340,6 +351,19 @@
     } catch (e) { /* si falla, el select queda vacio y se avisa al enviar */ }
     state.colegiosCargados = true;
     if (state.view === 'auth' && state.authTab === 'registro') render();
+  }
+
+  async function refrescarListaColegios() {
+    try {
+      const data = await api('/colegios');
+      state.colegiosDisponibles = data.colegios;
+      state.colegiosCargados = true;
+      const datalist = document.getElementById('lista-colegios');
+      if (datalist) {
+        datalist.innerHTML = state.colegiosDisponibles
+          .map(c => `<option value="${escapeHtml(c.nombre)}"></option>`).join('');
+      }
+    } catch (e) { /* si falla se deja la lista que ya habia cargada */ }
   }
 
   function formLogin() {
