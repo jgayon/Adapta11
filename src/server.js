@@ -19,7 +19,15 @@ const PORT = process.env.PORT || 3000;
 // imagen codificada en base64.
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// "no-cache" (no "no-store"): el navegador puede guardar una copia, pero
+// siempre debe revalidarla con el servidor (ETag) antes de usarla. Sin esto,
+// el navegador puede seguir corriendo una version vieja de app.js/styles.css
+// despues de un despliegue nuevo hasta que el usuario haga un refresco
+// forzado (Ctrl+F5), lo que hacia parecer que un fix "no se aplico" aunque
+// el servidor ya tuviera el codigo nuevo.
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  setHeaders: (res) => res.set('Cache-Control', 'no-cache')
+}));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/questions', questionsRoutes);
