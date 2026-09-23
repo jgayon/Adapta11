@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
+const { resumenEstudiante } = require('../lib/estadisticas');
 
 const router = express.Router();
 
@@ -146,6 +147,16 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
     params
   );
   res.json({ sesiones: rows });
+}));
+
+// Resumen estadistico del propio estudiante: sesiones totales, desglose por
+// materia/competencia/eje, tiempo promedio por respuesta (en general, en
+// las correctas y en las incorrectas) y la evolucion sesion a sesion para
+// graficar su progreso ("Mi progreso"). Debe ir antes de GET /:id para que
+// "summary" no se interprete como un id de sesion.
+router.get('/summary', requireAuth, asyncHandler(async (req, res) => {
+  const data = await resumenEstudiante(req.user.id);
+  res.json(data);
 }));
 
 // Retroalimentacion detallada de una sesion propia ya finalizada (para

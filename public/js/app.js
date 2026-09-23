@@ -22,7 +22,10 @@
     colegiosCargados: false, // evita volver a pedirlos en cada render si la lista esta vacia de verdad
 
     admin: {
-      tab: 'preguntas', // preguntas | estudiantes | colegios
+      tab: 'resumen', // resumen | preguntas | estudiantes | colegios
+      resumen: null,
+      comparativaColegios: [],
+      evolucion: null,
       preguntas: [],
       textos: [],
       filtroMateria: '',
@@ -43,17 +46,19 @@
       tab: 'resumen', // resumen | estudiantes
       resumen: null,
       comparativa: [],
+      evolucion: null,
       estudiantes: [],
       estudianteSeleccionado: null,
       detalle: null,
     },
 
     estudiante: {
-      pantalla: 'inicio', // inicio | practica-config | practica-run | simulacro-config | simulacro-run | resultado
+      pantalla: 'inicio', // inicio | practica-config | practica-run | simulacro-config | simulacro-run | resultado | progreso
       practica: null,
       simulacro: null,
       resultado: null,
       resultadoDetalle: null,
+      progreso: null,
     }
   };
 
@@ -164,6 +169,100 @@
     `;
   }
 
+  // Grafica de linea simple en SVG (sin librerias externas) para mostrar la
+  // evolucion del % de aciertos sesion a sesion. Recibe una o mas series
+  // (por ejemplo, una por materia) y dibuja cada una como una polilinea con
+  // sus puntos, mas una leyenda con colores. Cada serie posiciona sus
+  // propios puntos en su propio eje (no se alinean por fecha exacta entre
+  // series), asi que sirve para ver la tendencia, no para comparar fecha a
+  // fecha entre series con distinta cantidad de sesiones.
+  function lineChartSvg(series, opts) {
+    opts = opts || {};
+    const ancho = opts.ancho || 560, alto = opts.alto || 180;
+    const margenIzq = 34, margenDer = 12, margenSup = 12, margenInf = 10;
+    const w = ancho - margenIzq - margenDer, h = alto - margenSup - margenInf;
+    const conDatos = series.filter((s) => s.data && s.data.length);
+
+    const lineasGrid = [0, 25, 50, 75, 100].map((v) => {
+      const y = margenSup + h - (v / 100) * h;
+      return `
+        <line x1="${margenIzq}" y1="${y.toFixed(1)}" x2="${ancho - margenDer}" y2="${y.toFixed(1)}" class="chart-grid" />
+        <text x="${margenIzq - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end" class="chart-axis-label">${v}%</text>
+      `;
+    }).join('');
+
+    const trazos = conDatos.map((s) => {
+      const n = s.data.length;
+      const puntos = s.data.map((d, i) => ({
+        x: margenIzq + (n > 1 ? (i / (n - 1)) * w : w / 2),
+        y: margenSup + h - (Math.max(0, Math.min(100, d.porcentaje)) / 100) * h,
+        d
+      }));
+      const path = puntos.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+      const circulos = puntos.map((p) => {
+        const fh = formatFechaHora(p.d.fecha);
+        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.2" fill="var(${s.color})"><title>${fh.fecha}: ${p.d.porcentaje}%</title></circle>`;
+      }).join('');
+      return `<path d="${path}" fill="none" stroke="var(${s.color})" stroke-width="2" />${circulos}`;
+    }).join('');
+
+    const leyenda = series.map((s) => `
+      <span class="chart-legend-item"><span class="chart-legend-dot" style="background:var(${s.color});"></span>${escapeHtml(s.label)}</span>
+    `).join('');
+
+    const hayDatos = conDatos.some((s) => s.data.length >= 1);
+
+    return `
+      <div class="chart-linea">
+        <svg width="100%" height="${alto}" viewBox="0 0 ${ancho} ${alto}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Evolucion del porcentaje de aciertos">
+          ${lineasGrid}
+          ${trazos}
+        </svg>
+        <div class="chart-legend">${leyenda}</div>
+        ${!hayDatos ? '<p class="text-muted" style="margin-top:0.5rem;">Todavia no hay suficientes sesiones para graficar la evolucion.</p>' : ''}
+      </div>
+    `;
+  }
+
+  // Tarjetas con los tiempos promedio por respuesta (en general, en las
+  // correctas y en las incorrectas). Si todavia no hay respuestas
+  // registradas no se muestra nada (evita tarjetas vacias en "00:00").
+  function bloqueTiempos(tiempos) {
+    if (!tiempos || tiempos.promedio_general === null || tiempos.promedio_general === undefined) return '';
+    return `
+      <h4 style="margin-top:1.25rem;">Tiempo por respuesta</h4>
+      <div class="grid-3" style="margin-bottom:0.5rem;">
+        <div class="stat-card"><div class="stat-value">${formatTiempo(tiempos.promedio_general)}</div><div class="stat-label">Promedio general</div></div>
+        <div class="stat-card"><div class="stat-value">${formatTiempo(tiempos.promedio_correcta)}</div><div class="stat-label">En respuestas correctas</div></div>
+        <div class="stat-card"><div class="stat-value">${formatTiempo(tiempos.promedio_incorrecta)}</div><div class="stat-label">En respuestas incorrectas</div></div>
+      </div>
+    `;
+  }
+
+  // Grafica de evolucion del % de aciertos: una linea general (todas las
+  // sesiones en orden cronologico) y, si hay sesiones de mas de una
+  // materia, una linea por materia debajo, para ver si el progreso es
+  // parejo o esta concentrado en una sola materia.
+  const COLOR_POR_MATERIA = { lectura_critica: '--accent', matematicas: '--primary' };
+  function bloqueEvolucion(evolucion) {
+    if (!evolucion) return '';
+    const general = (evolucion.general || []).map(e => ({ fecha: e.fecha, porcentaje: e.porcentaje }));
+    const porMateriaRaw = evolucion.por_materia || {};
+    const seriesMateria = Object.keys(porMateriaRaw).map(m => ({
+      label: materiaLabel(m),
+      color: COLOR_POR_MATERIA[m] || '--warning',
+      data: porMateriaRaw[m]
+    }));
+    return `
+      <div class="card">
+        <h3>Evolucion del % de aciertos</h3>
+        <p class="hint">Cada punto es una sesion, en el orden en que se presentaron.</p>
+        ${lineChartSvg([{ label: 'General', color: '--accent', data: general }])}
+        ${seriesMateria.length > 1 ? `<h4 style="margin-top:1.25rem;">Por materia</h4>${lineChartSvg(seriesMateria)}` : ''}
+      </div>
+    `;
+  }
+
   function formatFechaHora(fechaSql) {
     if (!fechaSql) return { fecha: '-', hora: '-' };
     const partes = String(fechaSql).split(' ');
@@ -235,6 +334,8 @@
   function routeAfterLogin() {
     if (state.user.role === 'administrador') {
       state.view = 'admin';
+      state.admin.tab = 'resumen';
+      loadAdminResumen();
       loadAdminPreguntas();
       loadAdminEstudiantes();
     } else if (state.user.role === 'profesor') {
@@ -556,23 +657,87 @@
         <h1 class="mb-0" style="flex:1;">Panel de administrador</h1>
       </div>
       <div class="topnav" style="margin-bottom:1.25rem; gap:0.5rem;">
+        <button id="tab-resumen" class="btn ${a.tab === 'resumen' ? 'btn-secondary' : 'btn-outline'}">Resumen general</button>
         <button id="tab-preguntas" class="btn ${a.tab === 'preguntas' ? 'btn-secondary' : 'btn-outline'}">Banco de preguntas</button>
         <button id="tab-estudiantes" class="btn ${a.tab === 'estudiantes' ? 'btn-secondary' : 'btn-outline'}">Estudiantes</button>
         <button id="tab-colegios" class="btn ${a.tab === 'colegios' ? 'btn-secondary' : 'btn-outline'}">Colegios y profesores</button>
       </div>
       <div id="admin-content"></div>
     `;
+    el('tab-resumen').onclick = () => { a.tab = 'resumen'; loadAdminResumen(); render(); };
     el('tab-preguntas').onclick = () => { a.tab = 'preguntas'; render(); };
     el('tab-estudiantes').onclick = () => {
       a.tab = 'estudiantes'; a.estudianteSeleccionado = null; a.detalle = null; render();
     };
     el('tab-colegios').onclick = () => { a.tab = 'colegios'; loadAdminColegios(); render(); };
 
-    if (a.tab === 'preguntas') renderAdminPreguntas();
+    if (a.tab === 'resumen') renderAdminResumen();
+    else if (a.tab === 'preguntas') renderAdminPreguntas();
     else if (a.tab === 'estudiantes') renderAdminEstudiantes();
     else renderAdminColegios();
 
     if (a.modal) renderModalPregunta();
+  }
+
+  /* ---------- Admin: resumen general (todos los colegios) ---------- */
+
+  async function loadAdminResumen() {
+    const data = await api('/admin/resumen');
+    state.admin.resumen = data.resumen;
+    state.admin.comparativaColegios = data.comparativa_colegios;
+    state.admin.evolucion = data.evolucion || null;
+    render();
+  }
+
+  function renderAdminResumen() {
+    const a = state.admin;
+    const r = a.resumen;
+    if (!r || !r.total_estudiantes) {
+      el('admin-content').innerHTML = `<div class="card"><p class="text-muted mb-0">Todavia no hay estudiantes registrados, asi que no hay estadisticas para mostrar.</p></div>`;
+      return;
+    }
+
+    const filasComparativa = a.comparativaColegios.map((c, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(c.colegio_nombre)}</td>
+        <td>${c.num_estudiantes}</td>
+        <td>${c.num_sesiones}</td>
+        <td>${c.num_preguntas}</td>
+        <td>${c.porcentaje_aciertos}%</td>
+      </tr>
+    `).join('');
+
+    el('admin-content').innerHTML = `
+      <div class="card">
+        <h3>Resumen de toda la plataforma</h3>
+        <div class="row" style="gap:1.5rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
+          ${donutSvg(r.porcentaje_aciertos, '--accent')}
+          <div class="grid-3" style="flex:1; min-width:220px;">
+            <div class="stat-card"><div class="stat-value">${r.total_colegios}</div><div class="stat-label">Colegios</div></div>
+            <div class="stat-card"><div class="stat-value">${r.total_estudiantes}</div><div class="stat-label">Estudiantes</div></div>
+            <div class="stat-card"><div class="stat-value">${r.num_sesiones}</div><div class="stat-label">Sesiones totales</div></div>
+          </div>
+        </div>
+        ${bloqueTiempos(r.tiempos)}
+        <h4 style="margin-top:1.25rem;">Desglose por materia</h4>
+        ${(r.por_materia || []).map(m => barraConValor(materiaLabel(m.materia), m.correctas, m.total, m.porcentaje)).join('') || '<p class="text-muted">Sin datos todavia.</p>'}
+        ${(r.por_competencia || []).length ? `<h4 style="margin-top:1.25rem;">Desglose por competencia</h4>${r.por_competencia.map(c => barraConValor(competenciaLabel(c.competencia), c.correctas, c.total, c.porcentaje)).join('')}` : ''}
+        ${(r.por_eje || []).length ? `<h4 style="margin-top:1.25rem;">Desglose por eje tematico</h4>${r.por_eje.map(e => barraConValor(ejeLabel(e.eje), e.correctas, e.total, e.porcentaje)).join('')}` : ''}
+      </div>
+      ${bloqueEvolucion(a.evolucion)}
+      <div class="card">
+        <h3>Comparativa entre colegios</h3>
+        <p class="hint">Ordenada de mayor a menor porcentaje de aciertos.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Colegio</th><th>Estudiantes</th><th>Sesiones</th><th>Preguntas resp.</th><th>% Aciertos</th></tr></thead>
+            <tbody>${filasComparativa}</tbody>
+          </table>
+          ${!filasComparativa ? '<div class="empty-state">Ningun colegio tiene estudiantes con sesiones todavia.</div>' : ''}
+        </div>
+      </div>
+    `;
   }
 
   /* ---------- Admin: colegios y profesores ---------- */
@@ -1437,7 +1602,9 @@
         ${barrasMateria || '<p class="text-muted">Sin datos todavia.</p>'}
         ${barrasCompetencia ? `<h4 style="margin-top:1.25rem;">Desglose por competencia</h4>${barrasCompetencia}` : ''}
         ${barrasEje ? `<h4 style="margin-top:1.25rem;">Desglose por eje tematico</h4>${barrasEje}` : ''}
+        ${bloqueTiempos(r.tiempos)}
       </div>
+      ${bloqueEvolucion(datos.evolucion)}
       <div class="card">
         <h3>Sesiones recientes</h3>
         <div class="table-wrap">
@@ -1459,6 +1626,7 @@
     const data = await api('/profesor/resumen');
     state.profesor.resumen = data.resumen;
     state.profesor.comparativa = data.comparativa;
+    state.profesor.evolucion = data.evolucion || null;
     render();
   }
 
@@ -1523,7 +1691,9 @@
         ${barrasMateria || '<p class="text-muted">Sin datos todavia.</p>'}
         ${barrasCompetencia ? `<h4 style="margin-top:1.25rem;">Desglose por competencia</h4>${barrasCompetencia}` : ''}
         ${barrasEje ? `<h4 style="margin-top:1.25rem;">Desglose por eje tematico</h4>${barrasEje}` : ''}
+        ${bloqueTiempos(r.tiempos)}
       </div>
+      ${bloqueEvolucion(p.evolucion)}
       <div class="card">
         <h3>Comparativa entre estudiantes</h3>
         <p class="hint">Ordenada de mayor a menor porcentaje de aciertos.</p>
@@ -1654,13 +1824,14 @@
     if (p === 'simulacro-config') return renderSimulacroConfig();
     if (p === 'simulacro-run') return renderSimulacroRun();
     if (p === 'resultado') return renderResultado();
+    if (p === 'progreso') return renderEstudianteProgreso();
   }
 
   function renderEstudianteInicio() {
     app().innerHTML = `
       <h1>Hola, ${escapeHtml(state.user.nombre)}</h1>
       <p class="text-muted">Elige como quieres prepararte hoy.</p>
-      <div class="grid-2" style="margin-top:1.25rem;">
+      <div class="grid-3" style="margin-top:1.25rem;">
         <button class="mode-card" id="ir-practica">
           <div class="mode-icon">P</div>
           <h3>Practica</h3>
@@ -1671,10 +1842,95 @@
           <h3>Simulacro</h3>
           <p class="text-muted mb-0">Examen completo con cronometro continuo, navegacion libre y ambas materias.</p>
         </button>
+        <button class="mode-card" id="ir-progreso">
+          <div class="mode-icon">%</div>
+          <h3>Mi progreso</h3>
+          <p class="text-muted mb-0">Tus estadisticas: tiempos por respuesta, aciertos por competencia y la evolucion de tus sesiones.</p>
+        </button>
       </div>
     `;
     el('ir-practica').onclick = () => { state.estudiante.pantalla = 'practica-config'; render(); };
     el('ir-simulacro').onclick = () => { state.estudiante.pantalla = 'simulacro-config'; render(); };
+    el('ir-progreso').onclick = () => {
+      state.estudiante.pantalla = 'progreso';
+      render();
+      cargarProgresoEstudiante();
+    };
+  }
+
+  /* ---------- Mi progreso (estadisticas del propio estudiante) ---------- */
+
+  async function cargarProgresoEstudiante() {
+    const data = await api('/sessions/summary');
+    state.estudiante.progreso = data;
+    render();
+  }
+
+  function renderEstudianteProgreso() {
+    const datos = state.estudiante.progreso;
+    const volver = `<button class="btn btn-ghost btn-sm" id="volver-progreso">&larr; Volver</button>`;
+
+    if (!datos) {
+      app().innerHTML = `${volver}<h1>Mi progreso</h1><p class="text-muted">Cargando tus estadisticas...</p>`;
+      el('volver-progreso').onclick = () => { state.estudiante.pantalla = 'inicio'; render(); };
+      return;
+    }
+
+    const r = datos.resumen;
+    if (!r.num_sesiones) {
+      app().innerHTML = `${volver}<h1>Mi progreso</h1><div class="card"><p class="text-muted mb-0">Todavia no has hecho ninguna practica ni simulacro. Cuando termines tu primera sesion, aqui veras tus estadisticas.</p></div>`;
+      el('volver-progreso').onclick = () => { state.estudiante.pantalla = 'inicio'; render(); };
+      return;
+    }
+
+    const barrasMateria = r.por_materia.map(m => barraConValor(materiaLabel(m.materia), m.correctas, m.total, m.porcentaje)).join('');
+    const barrasCompetencia = (r.por_competencia || []).map(c => barraConValor(competenciaLabel(c.competencia), c.correctas, c.total, c.porcentaje)).join('');
+    const barrasEje = (r.por_eje || []).map(e => barraConValor(ejeLabel(e.eje), e.correctas, e.total, e.porcentaje)).join('');
+
+    const recientes = datos.sesiones_recientes.map(s => {
+      const fh = formatFechaHora(s.fecha_inicio);
+      const pct = s.num_preguntas ? Math.round((s.num_correctas / s.num_preguntas) * 100) : 0;
+      return `
+        <tr>
+          <td>${fh.fecha} ${fh.hora}</td>
+          <td><span class="pill pill-tipo-${s.tipo}">${s.tipo === 'practica' ? 'Practica' : 'Simulacro'}</span></td>
+          <td>${s.num_correctas}/${s.num_preguntas} (${pct}%)</td>
+          <td>${formatTiempo(s.tiempo_segundos)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    app().innerHTML = `
+      ${volver}
+      <h1>Mi progreso</h1>
+      <div class="card">
+        <div class="row" style="gap:1.5rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
+          ${donutSvg(r.porcentaje_aciertos, '--accent')}
+          <div class="grid-3" style="flex:1; min-width:220px;">
+            <div class="stat-card"><div class="stat-value">${r.num_sesiones}</div><div class="stat-label">Sesiones totales</div></div>
+            <div class="stat-card"><div class="stat-value">${r.num_practicas}</div><div class="stat-label">Practicas</div></div>
+            <div class="stat-card"><div class="stat-value">${r.num_simulacros}</div><div class="stat-label">Simulacros</div></div>
+          </div>
+        </div>
+        <p class="hint" style="margin-bottom:1.25rem;">El % de aciertos se calcula como respuestas correctas &divide; preguntas respondidas en todas tus sesiones (${r.num_correctas}/${r.num_preguntas} = ${r.porcentaje_aciertos}%).</p>
+        ${bloqueTiempos(r.tiempos)}
+        <h4 style="margin-top:1.25rem;">Desglose por materia</h4>
+        ${barrasMateria || '<p class="text-muted">Sin datos todavia.</p>'}
+        ${barrasCompetencia ? `<h4 style="margin-top:1.25rem;">Desglose por competencia</h4>${barrasCompetencia}` : ''}
+        ${barrasEje ? `<h4 style="margin-top:1.25rem;">Desglose por eje tematico</h4>${barrasEje}` : ''}
+      </div>
+      ${bloqueEvolucion(datos.evolucion)}
+      <div class="card">
+        <h3>Sesiones recientes</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Resultado</th><th>Tiempo</th></tr></thead>
+            <tbody>${recientes}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    el('volver-progreso').onclick = () => { state.estudiante.pantalla = 'inicio'; render(); };
   }
 
   /* ---------- Practica ---------- */
@@ -2063,6 +2319,14 @@
     const tiempoPromedio = det && det.preguntas.length
       ? Math.round(det.preguntas.reduce((a, p) => a + (p.tiempo_segundos || 0), 0) / det.preguntas.length)
       : 0;
+    const promedioPorEstado = (correcta) => {
+      if (!det) return null;
+      const grupo = det.preguntas.filter(p => !!p.correcta === correcta);
+      if (!grupo.length) return null;
+      return Math.round(grupo.reduce((a, p) => a + (p.tiempo_segundos || 0), 0) / grupo.length);
+    };
+    const tiempoCorrectas = promedioPorEstado(true);
+    const tiempoIncorrectas = promedioPorEstado(false);
 
     const mejorar = det ? [...det.porCompetencia, ...det.porEje] : [];
     const bloqueMejorar = mejorar.length ? `
@@ -2119,6 +2383,13 @@
           </div>
           <p class="hint text-center" style="margin-top:0.75rem;">El porcentaje de aciertos se calcula como preguntas correctas &divide; preguntas totales (${r.num_correctas}/${r.num_preguntas} = ${pct}%).</p>
           <p class="text-muted text-center" style="margin-top:0.5rem;">Tiempo total: ${formatTiempo(r.tiempo_segundos)} &middot; Tiempo promedio por pregunta: ${formatTiempo(tiempoPromedio)}${r.nivel_estimado ? ' &middot; Nivel estimado: ' + r.nivel_estimado : ''}</p>
+          ${(tiempoCorrectas !== null || tiempoIncorrectas !== null) ? `
+            <div class="grid-3" style="margin-top:0.9rem;">
+              <div class="stat-card"><div class="stat-value">${formatTiempo(tiempoCorrectas || 0)}</div><div class="stat-label">Tiempo en correctas</div></div>
+              <div class="stat-card"><div class="stat-value">${formatTiempo(tiempoIncorrectas || 0)}</div><div class="stat-label">Tiempo en incorrectas</div></div>
+              <div class="stat-card"><div class="stat-value">${formatTiempo(tiempoPromedio)}</div><div class="stat-label">Promedio por pregunta</div></div>
+            </div>
+          ` : ''}
         </div>
         ${bloqueMejorar}
         ${bloquePreguntas}

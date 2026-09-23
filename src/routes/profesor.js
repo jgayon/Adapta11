@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { requireProfesor } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
+const { resumenEstudiante, resumenParaUsuarios } = require('../lib/estadisticas');
 
 const router = express.Router();
 
@@ -79,45 +80,8 @@ router.get('/students/:id/summary', requireProfesor, asyncHandler(async (req, re
   );
   if (!estudiante) return res.status(404).json({ error: 'Estudiante no encontrado en tu colegio.' });
 
-  const sesiones = await db.all(
-    `SELECT * FROM exam_sessions WHERE user_id = ? ORDER BY fecha_inicio DESC`,
-    [req.params.id]
-  );
-  const porMateria = await db.all(`
-    SELECT materia, COUNT(*) as total, SUM(correcta) as correctas
-    FROM exam_answers WHERE session_id IN (SELECT id FROM exam_sessions WHERE user_id = ?) GROUP BY materia
-  `, [req.params.id]);
-  const porCompetencia = await db.all(`
-    SELECT competencia, COUNT(*) as total, SUM(correcta) as correctas
-    FROM exam_answers WHERE session_id IN (SELECT id FROM exam_sessions WHERE user_id = ?) AND competencia IS NOT NULL GROUP BY competencia
-  `, [req.params.id]);
-  const porEje = await db.all(`
-    SELECT eje, COUNT(*) as total, SUM(correcta) as correctas
-    FROM exam_answers WHERE session_id IN (SELECT id FROM exam_sessions WHERE user_id = ?) AND eje IS NOT NULL GROUP BY eje
-  `, [req.params.id]);
-
-  const totalPreg = sesiones.reduce((a, s) => a + (s.num_preguntas || 0), 0);
-  const totalCorr = sesiones.reduce((a, s) => a + (s.num_correctas || 0), 0);
-  const conDesglose = (rows, campo) => rows.map(r => ({
-    [campo]: r[campo], total: r.total, correctas: r.correctas || 0,
-    porcentaje: r.total ? Math.round(((r.correctas || 0) / r.total) * 100) : 0
-  }));
-
-  res.json({
-    estudiante,
-    resumen: {
-      num_sesiones: sesiones.length,
-      num_practicas: sesiones.filter(s => s.tipo === 'practica').length,
-      num_simulacros: sesiones.filter(s => s.tipo === 'simulacro').length,
-      num_preguntas: totalPreg,
-      num_correctas: totalCorr,
-      porcentaje_aciertos: totalPreg ? Math.round((totalCorr / totalPreg) * 100) : 0,
-      por_materia: conDesglose(porMateria, 'materia'),
-      por_competencia: conDesglose(porCompetencia, 'competencia'),
-      por_eje: conDesglose(porEje, 'eje')
-    },
-    sesiones_recientes: sesiones.slice(0, 10)
-  });
+  const data = await resumenEstudiante(estudiante.id);
+  res.json({ estudiante, ...data });
 }));
 
 // Resumen del colegio completo + comparativa entre sus estudiantes (para que
@@ -129,24 +93,12 @@ router.get('/resumen', requireProfesor, asyncHandler(async (req, res) => {
   const estudiantes = await db.all(`SELECT id FROM users WHERE role = 'estudiante' AND colegio_id = ?`, [colegioId]);
   if (!estudiantes.length) return res.json({ resumen: null, comparativa: [] });
   const ids = estudiantes.map(e => e.id);
-  const placeholders = ids.map(() => '?').join(',');
 
-  const porMateria = await db.all(`
-    SELECT materia, COUNT(*) as total, SUM(correcta) as correctas
-    FROM exam_answers WHERE session_id IN (SELECT id FROM exam_sessions WHERE user_id IN (${placeholders})) GROUP BY materia
-  `, ids);
-  const porCompetencia = await db.all(`
-    SELECT competencia, COUNT(*) as total, SUM(correcta) as correctas
-    FROM exam_answers WHERE session_id IN (SELECT id FROM exam_sessions WHERE user_id IN (${placeholders})) AND competencia IS NOT NULL GROUP BY competencia
-  `, ids);
-  const porEje = await db.all(`
-    SELECT eje, COUNT(*) as total, SUM(correcta) as correctas
-    FROM exam_answers WHERE session_id IN (SELECT id FROM exam_sessions WHERE user_id IN (${placeholders})) AND eje IS NOT NULL GROUP BY eje
-  `, ids);
-  const conDesglose = (rows, campo) => rows.map(r => ({
-    [campo]: r[campo], total: r.total, correctas: r.correctas || 0,
-    porcentaje: r.total ? Math.round(((r.correctas || 0) / r.total) * 100) : 0
-  }));
+  // El desglose por materia/competencia/eje, los tiempos promedio por
+  // respuesta y la evolucion sesion a sesion salen del mismo calculo que
+  // usa el estudiante para su propio progreso (lib/estadisticas.js), asi
+  // que aqui solo queda armar la comparativa entre estudiantes del colegio.
+  const data = await resumenParaUsuarios(ids);
 
   const comparativaRaw = await db.all(`
     SELECT u.id, u.nombre, u.apellidos,
@@ -164,20 +116,10 @@ router.get('/resumen', requireProfesor, asyncHandler(async (req, res) => {
     }))
     .sort((a, b) => b.porcentaje_aciertos - a.porcentaje_aciertos);
 
-  const totalPreg = comparativa.reduce((a, c) => a + c.num_preguntas, 0);
-  const totalCorr = comparativa.reduce((a, c) => a + c.num_correctas, 0);
-
   res.json({
-    resumen: {
-      total_estudiantes: estudiantes.length,
-      num_preguntas: totalPreg,
-      num_correctas: totalCorr,
-      porcentaje_aciertos: totalPreg ? Math.round((totalCorr / totalPreg) * 100) : 0,
-      por_materia: conDesglose(porMateria, 'materia'),
-      por_competencia: conDesglose(porCompetencia, 'competencia'),
-      por_eje: conDesglose(porEje, 'eje')
-    },
-    comparativa
+    resumen: { ...data.resumen, total_estudiantes: estudiantes.length },
+    comparativa,
+    evolucion: data.evolucion
   });
 }));
 

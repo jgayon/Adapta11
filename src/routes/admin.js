@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { requireAdmin } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
+const { resumenEstudiante, resumenParaUsuarios } = require('../lib/estadisticas');
 
 const router = express.Router();
 
@@ -116,7 +117,10 @@ router.get('/students/:id/sessions', requireAdmin, asyncHandler(async (req, res)
 }));
 
 // Estadisticas globales de un estudiante (todas las sesiones, desglose por
-// materia y por tipo de sesion).
+// materia/competencia/eje, tiempos promedio por respuesta y evolucion
+// sesion a sesion). El calculo vive en lib/estadisticas.js porque es el
+// mismo que usan el estudiante para su propio progreso y el profesor para
+// sus estudiantes: aqui solo se valida que el estudiante exista.
 router.get('/students/:id/summary', requireAdmin, asyncHandler(async (req, res) => {
   const estudiante = await db.get(
     `SELECT id, nombre, apellidos, email, created_at FROM users WHERE id = ? AND role = 'estudiante'`,
@@ -124,54 +128,54 @@ router.get('/students/:id/summary', requireAdmin, asyncHandler(async (req, res) 
   );
   if (!estudiante) return res.status(404).json({ error: 'Estudiante no encontrado.' });
 
-  const sesiones = await db.all(
-    `SELECT * FROM exam_sessions WHERE user_id = ? ORDER BY fecha_inicio DESC`,
-    [req.params.id]
-  );
-  const porMateria = await db.all(`
-    SELECT materia, COUNT(*) as total, SUM(correcta) as correctas
-    FROM exam_answers
-    WHERE session_id IN (SELECT id FROM exam_sessions WHERE user_id = ?)
-    GROUP BY materia
-  `, [req.params.id]);
-  const porCompetencia = await db.all(`
-    SELECT competencia, COUNT(*) as total, SUM(correcta) as correctas
-    FROM exam_answers
-    WHERE session_id IN (SELECT id FROM exam_sessions WHERE user_id = ?) AND competencia IS NOT NULL
-    GROUP BY competencia
-  `, [req.params.id]);
-  const porEje = await db.all(`
-    SELECT eje, COUNT(*) as total, SUM(correcta) as correctas
-    FROM exam_answers
-    WHERE session_id IN (SELECT id FROM exam_sessions WHERE user_id = ?) AND eje IS NOT NULL
-    GROUP BY eje
-  `, [req.params.id]);
+  const data = await resumenEstudiante(estudiante.id);
+  res.json({ estudiante, ...data });
+}));
 
-  const totalPreg = sesiones.reduce((a, s) => a + (s.num_preguntas || 0), 0);
-  const totalCorr = sesiones.reduce((a, s) => a + (s.num_correctas || 0), 0);
-  const practicaCount = sesiones.filter(s => s.tipo === 'practica').length;
-  const simulacroCount = sesiones.filter(s => s.tipo === 'simulacro').length;
-  const conDesglose = (rows, campo) => rows.map(r => ({
-    [campo]: r[campo],
-    total: r.total,
-    correctas: r.correctas || 0,
-    porcentaje: r.total ? Math.round(((r.correctas || 0) / r.total) * 100) : 0
-  }));
+// Resumen de toda la plataforma (todos los colegios) mas una comparativa
+// entre colegios, para que el administrador vea de un vistazo cual
+// necesita mas apoyo, igual que el profesor lo ve entre sus estudiantes.
+router.get('/resumen', requireAdmin, asyncHandler(async (req, res) => {
+  const estudiantes = await db.all(`SELECT id, colegio_id FROM users WHERE role = 'estudiante'`);
+  const colegios = await db.all(`SELECT id, nombre FROM colegios ORDER BY nombre`);
+  if (!estudiantes.length) {
+    return res.json({
+      resumen: { total_estudiantes: 0, total_colegios: colegios.length, num_sesiones: 0, num_practicas: 0, num_simulacros: 0, num_preguntas: 0, num_correctas: 0, porcentaje_aciertos: 0, por_materia: [], por_competencia: [], por_eje: [], tiempos: { promedio_general: null, promedio_correcta: null, promedio_incorrecta: null } },
+      comparativa_colegios: []
+    });
+  }
+
+  const data = await resumenParaUsuarios(estudiantes.map((e) => e.id));
+
+  const comparativaColegios = [];
+  for (const c of colegios) {
+    const idsColegio = estudiantes.filter((e) => e.colegio_id === c.id).map((e) => e.id);
+    if (!idsColegio.length) continue;
+    const placeholders = idsColegio.map(() => '?').join(',');
+    const fila = await db.get(`
+      SELECT COUNT(*) as num_sesiones,
+             COALESCE(SUM(num_preguntas), 0) as num_preguntas,
+             COALESCE(SUM(num_correctas), 0) as num_correctas
+      FROM exam_sessions WHERE user_id IN (${placeholders})
+    `, idsColegio);
+    const numPreg = fila ? (fila.num_preguntas || 0) : 0;
+    const numCorr = fila ? (fila.num_correctas || 0) : 0;
+    comparativaColegios.push({
+      colegio_id: c.id,
+      colegio_nombre: c.nombre,
+      num_estudiantes: idsColegio.length,
+      num_sesiones: fila ? fila.num_sesiones : 0,
+      num_preguntas: numPreg,
+      num_correctas: numCorr,
+      porcentaje_aciertos: numPreg ? Math.round((numCorr / numPreg) * 100) : 0
+    });
+  }
+  comparativaColegios.sort((a, b) => b.porcentaje_aciertos - a.porcentaje_aciertos);
 
   res.json({
-    estudiante,
-    resumen: {
-      num_sesiones: sesiones.length,
-      num_practicas: practicaCount,
-      num_simulacros: simulacroCount,
-      num_preguntas: totalPreg,
-      num_correctas: totalCorr,
-      porcentaje_aciertos: totalPreg ? Math.round((totalCorr / totalPreg) * 100) : 0,
-      por_materia: conDesglose(porMateria, 'materia'),
-      por_competencia: conDesglose(porCompetencia, 'competencia'),
-      por_eje: conDesglose(porEje, 'eje')
-    },
-    sesiones_recientes: sesiones.slice(0, 10)
+    resumen: { ...data.resumen, total_estudiantes: estudiantes.length, total_colegios: colegios.length },
+    comparativa_colegios: comparativaColegios,
+    evolucion: data.evolucion
   });
 }));
 
