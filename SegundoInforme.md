@@ -1,0 +1,11 @@
+# Adapta 11 — Segundo Informe
+
+## Resumen / Abstract
+
+Adapta 11 es una aplicación web orientada a la preparación para las pruebas Saber 11, inicialmente en las áreas de Lectura Crítica y Matemáticas. El proyecto parte de la necesidad de ofrecer una experiencia de práctica que no se limite a presentar un banco estático de preguntas, sino que permita organizar la práctica según la materia, la competencia, el eje temático y el desempeño registrado del estudiante.
+
+Durante el desarrollo se consolidó un prototipo web funcional con una arquitectura cliente-servidor. El backend está implementado con Node.js y Express, mientras que la persistencia utiliza SQLite/libSQL mediante `@libsql/client`, con conexión a Turso para despliegue. El frontend se implementa como una aplicación de una sola página servida desde el mismo backend, utilizando HTML, CSS y JavaScript. La autenticación utiliza JWT almacenado mediante cookie `httpOnly`, y las contraseñas se almacenan mediante `bcryptjs`.
+
+El avance actual incluye registro e inicio de sesión, gestión de estudiantes, roles de administrador y profesor, asociación de estudiantes a colegios, administración del banco de preguntas, clasificación por materia/competencia/eje/dificultad, textos compartidos para grupos de preguntas, práctica dirigida, simulacros, registro de sesiones y respuestas, retroalimentación por sesión y paneles estadísticos. El banco incluido en `seed.js` contiene 104 preguntas de ejemplo/semilla: 51 de Lectura Crítica y 53 de Matemáticas. La selección adaptativa descrita como objetivo en el primer informe todavía no aparece implementada como mecanismo automático basado en historial; por tanto, queda como una de las actividades principales para el cierre.
+
+La validación realizada sobre el material entregado permite comprobar la coherencia estructural del proyecto y la sintaxis de los archivos JavaScript mediante `node --check`. El repositorio también contiene instrucciones de despliegue para Render y Turso y una ruta `/healthz` para comprobación del servicio.
