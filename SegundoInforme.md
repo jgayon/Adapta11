@@ -228,28 +228,101 @@ sequenceDiagram
 
 ### 10.4 Comportamiento
 
+En el flujo de práctica, el sistema realiza una cantidad limitada de pasos: solicitar preguntas, responder, enviar la sesión y recibir el resultado. La consulta de preguntas utiliza filtros y `ORDER BY RANDOM()` para obtener una selección aleatoria dentro del conjunto permitido. La arquitectura evita que el navegador determine por sí mismo si una respuesta es correcta.
+
+El simulacro utiliza un flujo similar, pero construye un conjunto de preguntas por materia y mezcla niveles de dificultad. El estudiante puede navegar por las preguntas y finalizar cuando haya completado la sesión. Al finalizar, el backend vuelve a calcular los resultados y los almacena.
+
+El principal potencial se encuentra en las consultas aleatorias y en las consultas agregadas de estadísticas cuando el volumen de datos crezca. En el prototipo no se dispone de una medición de carga que permita cuantificar este comportamiento. La arquitectura actual es suficientemente directa para continuar el desarrollo, pero la prueba de rendimiento debe formar parte del cierre.
+
 ## 11. Implementación y avance actual
 
 ### 11.1 Stack tecnológico
 
+El backend utiliza **Node.js** y **Express 4**, con `cookie-parser` para manejar cookies, `jsonwebtoken` para autenticación y `bcryptjs` para el almacenamiento seguro de contraseñas. `dotenv` permite cargar configuración desde variables de entorno y `@libsql/client` proporciona acceso tanto a SQLite local como a libSQL/Turso.
+
+El frontend está implementado con HTML, CSS y JavaScript sin un framework SPA externo. Esta decisión mantiene bajo el número de dependencias y permite que Express sirva directamente los recursos de la aplicación. El archivo `app.js` contiene la lógica de navegación, consumo de API, formularios, práctica, simulacro y paneles.
+
+Para despliegue se utilizan **Render** y, como opción de base de datos compartida, **Turso**. El proyecto incluye `render.yaml`, `.env.example` e `INSTRUCCIONES-DESPLIEGUE.md`, con las variables necesarias para configurar el entorno. La solución también puede ejecutarse localmente con SQLite sin requerir Turso.
+
 ### 11.2 Componentes implementados
+
+La autenticación incluye registro, inicio de sesión, cierre de sesión y consulta del usuario actual. Existen tres roles: estudiante, profesor y administrador. Los estudiantes se asocian a colegios y los profesores pueden administrar o consultar la información de estudiantes de su colegio.
+
+El banco de preguntas permite administrar preguntas por materia, competencia y eje, además de dificultad, explicación e imagen. También se implementó la entidad `textos` para compartir un mismo contexto entre varias preguntas. El sistema mantiene las preguntas agrupadas cuando un texto tiene varias preguntas asociadas.
+
+La práctica, el simulacro y el seguimiento se encuentran implementados. El estudiante puede realizar sesiones, consultar resultados y revisar su progreso. Los administradores y profesores cuentan con paneles para consultar estadísticas de estudiantes. 
 
 ### 11.3 Integraciones realizadas
 
+La integración principal es entre frontend y API Express. El frontend realiza solicitudes HTTP a las rutas internas y utiliza la cookie de autenticación para mantener la sesión. El middleware verifica el JWT antes de permitir el acceso a rutas protegidas.
+
+La base de datos se integra mediante `@libsql/client`. En local se crea un archivo SQLite dentro del directorio de datos, mientras que cuando `TURSO_DATABASE_URL` está definida se utiliza la base remota. La inicialización del esquema incluye creación de tablas, índices y migraciones para cambios posteriores.
+
+También existe una integración prevista para despliegue mediante Render. El `render.yaml` configura el servicio web, el comando de construcción, el comando de inicio y el health check. La integración con Turso requiere proporcionar la URL y el token como variables de entorno en el entorno de despliegue.
+
+
 ### 11.4 Pendientes para la entrega final
 
+El pendiente funcional más importante es implementar la selección adaptativa real. El sistema ya posee historial de respuestas, porcentajes por competencia y eje, tiempos y evolución, por lo que el siguiente paso consiste en definir una estrategia reproducible que utilice estos datos para determinar qué preguntas conviene presentar en una nueva sesión.
+
+También deben completarse las validaciones formales. Es necesario crear casos de prueba para autenticación, permisos por rol, creación y edición de preguntas, grupos de textos, práctica, simulacro, almacenamiento de resultados, estadísticas y retroalimentación. Deben añadirse pruebas de integración y, si el tiempo lo permite, una prueba de carga.
+
+Finalmente, debe realizarse una validación de usabilidad con usuarios representativos. Esta actividad debe medir si los estudiantes comprenden la navegación, si pueden iniciar y finalizar una práctica sin dificultad, si interpretan correctamente sus resultados y si la información del progreso les resulta útil. Los hallazgos deben traducirse en ajustes antes de la entrega final.
+
+
 ## 12. Despliegue y operación preliminar
+
+Para desarrollo local, el proyecto requiere Node.js 18 o superior y las dependencias definidas en `package.json`. Después de instalar las dependencias, se puede ejecutar `npm run seed` para crear o actualizar el usuario administrador y cargar las preguntas de semilla, y `npm start` para iniciar el servidor.
+
+La aplicación local utiliza SQLite mediante libSQL, por lo que no requiere un servidor de base de datos separado. El backend crea las tablas automáticamente mediante `initSchema()`. El servicio se expone por defecto en el puerto 3000 y dispone de `/healthz` para verificar que el proceso responde.
+
+Para operación compartida, la documentación contempla desplegar el backend en Render y utilizar Turso como base de datos persistente. Las credenciales y secretos deben mantenerse fuera del repositorio mediante variables de entorno. El despliegue actual debe considerarse preliminar hasta ejecutar una validación completa del entorno remoto y de sus condiciones de persistencia y disponibilidad.
+
 
 ## 13. Validación preliminar
 
 ### 13.1 Pruebas por componentes
 
+La revisión del código permitió verificar que los archivos JavaScript principales tienen sintaxis válida utilizando `node --check`. Esto cubre los archivos del backend, rutas, middleware, bibliotecas auxiliares y el frontend principal. La revisión no sustituye las pruebas funcionales, pero permite confirmar que el material entregado no contiene errores sintácticos de JavaScript que impidan su interpretación.
+
+A nivel de componentes, las rutas implementan operaciones separadas para autenticación, preguntas, sesiones, administración, colegios y profesores. La estructura permite probar cada conjunto de endpoints de manera independiente. También existen funciones estadísticas reutilizables para estudiantes, profesores y administradores.
+
+La validación funcional completa todavía requiere ejecutar una matriz de casos de prueba con datos controlados. En particular, deben comprobarse escenarios de error, permisos, datos inexistentes, preguntas desactivadas, sesiones incompletas y límites de cantidad de preguntas.
+
+
+
 ### 13.2 Pruebas de integración
+
+La integración principal corresponde al ciclo completo de práctica: autenticación, consulta de preguntas, interacción en frontend, envío de respuestas, corrección en servidor, almacenamiento de sesión y presentación de resultados. El código contiene todos estos componentes y las rutas están conectadas mediante el servidor Express.
+
+También existe integración entre preguntas y textos compartidos. Al solicitar una tanda de práctica o simulacro, el backend puede completar un grupo de preguntas asociado a un mismo texto y mantener sus preguntas contiguas. Esta funcionalidad permite representar contextos de lectura con varias preguntas.
+
 
 ### 13.3 Pruebas de usabilidad
 
+La interfaz contempla diferentes vistas para los roles y ofrece flujos diferenciados para autenticación, práctica, simulacro, progreso y administración. Esto proporciona una base para realizar pruebas con usuarios reales y recoger observaciones sobre navegación y comprensión.
+
+Sin embargo, el material entregado no contiene resultados documentados de una prueba formal de usabilidad con estudiantes, profesores o administradores. Por ello, no se deben presentar como validadas de forma experimental afirmaciones sobre satisfacción o facilidad de uso.
+
+La prueba final debe incluir tareas concretas, como registrarse, iniciar una práctica, responder preguntas, revisar resultados, consultar progreso y, para los roles administrativos, gestionar una pregunta o revisar el desempeño de un estudiante. Los resultados pueden documentarse mediante tasa de éxito de tareas, errores observados y comentarios cualitativos.
+
+
+
 ## 14. Resultados parciales y discusión
 
+El principal resultado parcial es la existencia de un prototipo funcional que integra contenido, usuarios, práctica y seguimiento en una misma aplicación. El proyecto dejó de estar limitado a la definición del problema y ahora cuenta con rutas de backend, persistencia, interfaz y mecanismos de administración que permiten recorrer los principales flujos del sistema.
+
+Un segundo resultado es la consolidación de la información necesaria para analizar el desempeño. Cada respuesta puede conservar materia, dificultad, competencia, eje, corrección y tiempo. Esta información permite construir estadísticas agregadas y evolución del estudiante, y constituye un insumo directo para desarrollar la selección adaptativa prevista.
+
+
 ## 15. Plan de cierre hacia la entrega final
+
+La primera prioridad del cierre debe ser definir e implementar el mecanismo de selección adaptativa. Una estrategia inicial puede utilizar los porcentajes de acierto por competencia y eje, el nivel de dificultad y la evolución reciente para identificar áreas de refuerzo. La implementación debe ser explicable y reproducible, de forma que sea posible justificar por qué una pregunta fue seleccionada.
+
+La segunda prioridad debe ser ejecutar una batería de pruebas. Se deben cubrir autenticación y roles, banco de preguntas, textos compartidos, práctica, simulacro, sesiones, estadísticas y retroalimentación. Después deben realizarse pruebas de integración y una validación básica de rendimiento, registrando tiempos de respuesta y comportamiento con varias solicitudes concurrentes.
+
+La tercera prioridad corresponde a la validación con usuarios y al cierre documental. Se debe probar el sistema con estudiantes representativos, recoger observaciones, corregir los problemas encontrados y documentar los resultados. Finalmente, debe actualizarse la documentación técnica, preparar el despliegue final, revisar las variables de entorno y completar el informe final con evidencia de las pruebas realizadas.
+
+
 
 ## 16. Referencias
