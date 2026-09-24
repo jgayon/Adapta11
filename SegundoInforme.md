@@ -103,30 +103,128 @@ La usabilidad y el rendimiento todavía requieren una validación más formal. E
 | Validación final | Pendiente | Pruebas de integración, usabilidad, rendimiento y aceptación |
 | Cierre | Pendiente | Documentación final, ajustes y entrega del prototipo |
 
-
-
-
 ## 8. Requerimientos
 
 ### 8.1 Funcionales
 
+El sistema debe permitir registrar e identificar estudiantes, administradores y profesores, aplicando permisos de acuerdo con el rol. Esta funcionalidad está implementada mediante autenticación con JWT y middleware de autorización. Los estudiantes pueden asociarse a un colegio, mientras que los profesores se vinculan a un colegio para consultar sus estudiantes.
+
+El sistema debe permitir gestionar el banco de preguntas. El administrador puede consultar preguntas, filtrarlas por materia, competencia y eje, crear nuevas preguntas, editar preguntas existentes y desactivarlas. También puede administrar textos compartidos y crear grupos de preguntas relacionados con un mismo contexto.
+
+El sistema debe permitir realizar práctica, simulacros y seguimiento. El estudiante puede seleccionar criterios de práctica, responder preguntas y finalizar sesiones. El servidor guarda las respuestas y genera resultados. El estudiante dispone además de una vista de progreso con sesiones, aciertos, desgloses y evolución.
+
+
 ### 8.2 No funcionales
+
+En seguridad, el sistema utiliza contraseñas con `bcryptjs` y autenticación mediante JWT almacenado en cookie `httpOnly`. El acceso a las rutas administrativas y de profesor está protegido por middleware. Las variables sensibles de despliegue se manejan mediante variables de entorno y el repositorio incluye un `.env.example` sin secretos reales.
+
+En mantenibilidad, el backend se divide por responsabilidad entre `routes`, `middleware`, `lib` y `db.js`. La base de datos se inicializa mediante funciones idempotentes y se contemplan migraciones para columnas agregadas posteriormente. El frontend concentra la interfaz en `public/js/app.js`, servido junto con los recursos estáticos desde Express.
+
+En despliegue, el proyecto está preparado para funcionar localmente con SQLite y contempla Turso/libSQL para producción. El archivo `render.yaml` define un servicio web en Render con comandos de instalación, semilla y arranque, además de una ruta de health check. Aún deben medirse de forma experimental atributos como latencia, throughput, capacidad concurrente y disponibilidad real.
+
 
 ## 9. Evaluación de alternativas
 
 ### Pregunta: ¿Cuál alternativa ofrece mejor desempeño bajo carga esperada?
 
+La solución actual utiliza Node.js con Express y una base SQLite/libSQL. Para el alcance del prototipo esta alternativa reduce la complejidad y permite que el frontend y el backend se ejecuten como un mismo servicio. Las consultas principales se realizan sobre tablas con índices para preguntas, sesiones y respuestas, lo cual favorece las operaciones habituales del sistema.
+
+No se cuenta todavía con mediciones de latencia promedio, latencia máxima o throughput obtenidas mediante una prueba de carga. Por tanto, no sería correcto presentar una comparación cuantitativa entre SQLite/libSQL y otras alternativas a partir del material disponible. La evaluación de desempeño queda como una actividad de validación para el cierre.
+
+Para completar esta evaluación se propone medir tiempos de respuesta de operaciones críticas como inicio de sesión, carga de preguntas, finalización de sesión y consulta de estadísticas, además de observar el comportamiento con usuarios concurrentes. Los resultados deberán registrarse con una carga definida y condiciones reproducibles.
+
+
 ### Pregunta: ¿Qué grado de acoplamiento introduce cada opción?
+
+La arquitectura actual mantiene el frontend y backend dentro del mismo proyecto y utiliza rutas REST separadas. Esto simplifica la integración, pero también significa que el frontend depende de la estructura de los endpoints del backend. La base de datos se accede mediante un módulo (`src/db.js`), lo que concentra la conexión y facilita cambiar entre SQLite local y Turso.
+
+El acoplamiento con servicios externos se mantiene limitado. La aplicación puede funcionar localmente sin Turso, mientras que Render y Turso se incorporan principalmente para despliegue. Esta característica permite desarrollar y probar el prototipo sin depender permanentemente de infraestructura externa.
+
+Para una evolución posterior se podría separar con mayor claridad las reglas de negocio del acceso a datos y crear interfaces para componentes sustituibles. En el estado actual, sin embargo, la organización por rutas, middleware, biblioteca estadística y módulo de base de datos proporciona una separación suficiente para el tamaño del prototipo.
+
+
 
 ### Pregunta: ¿Qué nivel de disponibilidad y tolerancia a fallos ofrece cada alternativa?
 
+En desarrollo local la disponibilidad depende del proceso Node.js y del archivo SQLite local. Si el proceso se detiene, la aplicación deja de responder, aunque los datos del archivo permanecen disponibles al reiniciar. Esta modalidad es adecuada para desarrollo, pero no constituye una estrategia de alta disponibilidad.
+
+Para producción se plantea Render junto con Turso. El uso de una base de datos externa evita depender del almacenamiento efímero del servicio web y permite conservar los datos después de reinicios o despliegues. El proyecto también define `/healthz` como endpoint de comprobación de salud del servicio.
+
+No se implementaron mecanismos avanzados de redundancia, recuperación automática o failover dentro del código entregado. Por ello, la tolerancia a fallos debe considerarse preliminar y dependiente de los servicios de infraestructura utilizados. Antes de una entrega productiva sería necesario documentar copias de seguridad, recuperación y manejo de fallos parciales.
+
+
 ## 10. Diseño y arquitectura
 
+La arquitectura actual es de tipo cliente-servidor. El navegador ejecuta la interfaz construida con HTML, CSS y JavaScript, mientras que Node.js con Express sirve los archivos estáticos, expone la API y ejecuta las reglas de acceso a datos. La comunicación entre interfaz y backend se realiza mediante solicitudes HTTP a rutas `/api/*`.
+
+El backend está organizado en módulos. `server.js` configura Express y registra las rutas; `auth.js`, `questions.js`, `sessions.js`, `admin.js`, `colegios.js` y `profesor.js` concentran los endpoints de cada dominio; `middleware/auth.js` controla autenticación y autorización; y `db.js` encapsula la conexión y operaciones principales de persistencia.
+
+La base de datos utiliza SQLite/libSQL y puede conectarse a Turso mediante variables de entorno. Esta arquitectura coincide con la necesidad del prototipo de mantener una solución relativamente sencilla de ejecutar, pero con una ruta de despliegue que permita compartir datos entre usuarios.
+
 ### 10.1 Descripción general de la arquitectura
+La arquitectura actual es de tipo cliente-servidor. El navegador ejecuta la interfaz construida con HTML, CSS y JavaScript, mientras que Node.js con Express sirve los archivos estáticos, expone la API y ejecuta las reglas de acceso a datos. La comunicación entre interfaz y backend se realiza mediante solicitudes HTTP a rutas `/api/*`.
+
+El backend está organizado en módulos. `server.js` configura Express y registra las rutas; `auth.js`, `questions.js`, `sessions.js`, `admin.js`, `colegios.js` y `profesor.js` concentran los endpoints de cada dominio; `middleware/auth.js` controla autenticación y autorización; y `db.js` encapsula la conexión y operaciones principales de persistencia.
+
+La base de datos utiliza SQLite/libSQL y puede conectarse a Turso mediante variables de entorno. Esta arquitectura coincide con la necesidad del prototipo de mantener una solución relativamente sencilla de ejecutar, pero con una ruta de despliegue que permita compartir datos entre usuarios.
+
 
 ### 10.2 Componentes del sistema
 
+El **frontend** es responsable de presentar formularios, vistas de práctica, simulacro, resultados, progreso y administración. El archivo `public/js/app.js` mantiene el estado de la aplicación y consume la API, mientras que `public/css/styles.css` concentra la presentación visual.
+
+El **backend** procesa autenticación, preguntas, sesiones, estadísticas y administración. Sus rutas validan permisos y consultan la base de datos. El módulo de estadísticas reutiliza consultas para generar indicadores de estudiantes individuales y grupos de estudiantes, evitando duplicar la lógica estadística entre los diferentes roles.
+
+La **base de datos** contiene entidades para colegios, usuarios, textos, preguntas, sesiones y respuestas. Las relaciones entre estas entidades permiten conservar el contexto de una pregunta, registrar quién realiza una sesión y asociar cada respuesta con la pregunta correspondiente. El siguiente diagrama resume la arquitectura:
+
+```mermaid
+flowchart LR
+    U[Estudiante / Profesor / Administrador]
+    FE[Frontend<br/>HTML + CSS + JavaScript]
+    API[Backend<br/>Node.js + Express]
+    AUTH[Autenticación<br/>JWT + cookie httpOnly]
+    DB[(SQLite / libSQL)]
+    TURSO[(Turso)]
+    RENDER[Render]
+
+    U --> FE
+    FE --> API
+    API --> AUTH
+    API --> DB
+    DB -. producción .-> TURSO
+    API -. despliegue .-> RENDER
+```
+
+
 ### 10.3 Interacción entre módulos
+
+El frontend se comunica con el backend mediante la función `api()` definida en `public/js/app.js`. Esta función centraliza las solicitudes, el manejo de errores y el intercambio de datos JSON. Dependiendo de la operación, las solicitudes llegan a autenticación, preguntas, sesiones, administración, colegios o profesor.
+
+Durante una práctica, el frontend solicita un conjunto de preguntas a `/api/questions/practice`, recibe las preguntas y presenta sus opciones al estudiante. Al finalizar, envía las respuestas a `/api/sessions`; el servidor consulta nuevamente las preguntas, calcula los resultados y almacena la sesión y sus respuestas. Posteriormente, el frontend puede consultar `/api/sessions/summary` o una sesión individual.
+
+El flujo puede representarse de la siguiente forma:
+
+```mermaid
+sequenceDiagram
+    participant E as Estudiante
+    participant F as Frontend
+    participant A as API Express
+    participant DB as Base de datos
+
+    E->>F: Selecciona materia/competencia/eje
+    F->>A: GET /questions/practice
+    A->>DB: Consulta preguntas
+    DB-->>A: Preguntas filtradas
+    A-->>F: Preguntas
+    F-->>E: Presenta práctica
+    E->>F: Responde preguntas
+    F->>A: POST /sessions
+    A->>DB: Consulta respuestas correctas
+    A->>DB: Guarda sesión y respuestas
+    DB-->>A: Datos guardados
+    A-->>F: Resultado y retroalimentación
+    F-->>E: Muestra resultados
+```
 
 ### 10.4 Comportamiento
 
