@@ -58,15 +58,53 @@ El objetivo relacionado con la selección adaptativa automática continúa parci
 
 ## 6. Solución propuesta
 
+Adapta 11 se implementó como una aplicación web con una interfaz para tres tipos de usuarios: estudiante, administrador y profesor o administrador de colegio. El estudiante constituye el usuario principal de aprendizaje y dispone de las funciones de práctica, simulacro y consulta de progreso. Los otros roles permiten gestionar el contenido y observar información agregada sobre los estudiantes.
+
+El banco de preguntas está respaldado por la tabla `questions`, que incluye materia, dificultad, competencia, eje, enunciado, opciones, respuesta correcta, explicación, imagen y referencia a textos compartidos. El proyecto entregado contiene 104 preguntas en la semilla: 51 de Lectura Crítica y 53 de Matemáticas. La distribución por dificultad es de 29 fáciles, 42 medias y 33 difíciles.
+
+El flujo implementado permite registrar una sesión, guardar cada respuesta y posteriormente generar retroalimentación. El servidor vuelve a consultar la pregunta y determina si la respuesta es correcta a partir de la información almacenada, en lugar de confiar exclusivamente en el navegador. Esta decisión permite mantener consistencia en las estadísticas y constituye una base adecuada para futuras funciones adaptativas.
+
 ## 7. Metodología de desarrollo
 
 ### 7.1 Enfoque metodológico
 
+El proyecto siguió un enfoque de desarrollo iterativo, coherente con el prototipado propuesto en el primer informe. Las funcionalidades se fueron integrando sobre una base existente y se añadieron módulos conforme aparecieron nuevas necesidades del sistema. El repositorio actual refleja varias iteraciones sobre la estructura de usuarios, preguntas, sesiones, estadísticas y roles.
+
+El desarrollo se apoyó principalmente en la separación entre rutas del backend, lógica auxiliar, middleware y frontend. En el backend existen rutas independientes para autenticación, preguntas, sesiones, administración, colegios y profesores. Esta separación permite modificar una parte del sistema sin concentrar toda la lógica en un único archivo.
+
+La validación realizada durante el desarrollo ha sido principalmente funcional y técnica. Se verificó la sintaxis de los archivos JavaScript del backend y frontend mediante `node --check`, y el repositorio contiene mecanismos de comprobación del servicio mediante `/healthz`. Para el cierre todavía es necesario complementar estas verificaciones con pruebas sistemáticas de casos de uso, integración, usabilidad y comportamiento bajo carga.
+
+
 ### 7.2 Iteraciones o fases de desarrollo
+
+La primera fase se concentró en consolidar el banco y su estructura. El sistema terminó con preguntas clasificadas por materia, dificultad, competencia y eje, además de soporte para textos compartidos. La administración permite consultar, crear, editar y desactivar preguntas, y existe una semilla idempotente para incorporar preguntas sin duplicar las ya existentes.
+
+La segunda fase se concretó principalmente en la práctica dirigida y el simulacro. El modo de práctica permite filtrar por materia y opcionalmente por competencia y eje. El simulacro combina preguntas de las materias seleccionadas y mezcla dificultades, manteniendo la posibilidad de navegar entre preguntas. Estas funciones representan un avance sobre el concepto inicial de seleccionador, aunque no equivalen todavía a la selección adaptativa basada en historial.
+
+La tercera fase incorporó el seguimiento y la retroalimentación. Las sesiones guardan cantidad de preguntas, aciertos, tiempos, materia, dificultad y otros metadatos. El módulo estadístico calcula porcentajes y evolución, mientras que el detalle de una sesión puede identificar preguntas correctas e incorrectas, tiempos y explicaciones. Para el cierre debe completarse la personalización adaptativa y fortalecer la validación con usuarios.
 
 ### 7.3 Estrategia de validación
 
+La selección dirigida puede validarse comprobando que los filtros enviados por el estudiante se reflejen en las preguntas recibidas. El endpoint `/api/questions/practice` restringe la consulta por materia y, cuando se proporciona, por competencia y eje. Esto permite realizar pruebas con combinaciones válidas e inválidas y comprobar que las preguntas presentadas correspondan con los filtros solicitados.
+
+La persistencia y corrección de resultados puede validarse mediante sesiones reales de práctica y simulacro. El endpoint de sesiones consulta nuevamente las preguntas almacenadas y calcula los aciertos en el servidor. Posteriormente, `/api/sessions/summary` y `/api/sessions/:id` proporcionan los indicadores y el detalle de retroalimentación que puede compararse manualmente con las respuestas entregadas.
+
+La usabilidad y el rendimiento todavía requieren una validación más formal. En el material entregado no se encuentra una matriz de pruebas con participantes, resultados cuantitativos de satisfacción, pruebas de carga o métricas de latencia.
+
+
 ### 7.4 Plan de trabajo, cronograma e hitos
+
+| Fase | Estado al segundo informe | Resultado |
+|---|---|---|
+| Banco de preguntas y clasificación | Avanzada | Banco inicial integrado, administración y clasificación implementadas |
+| Selección dirigida y simulacro | Implementada | Práctica por materia/competencia/eje y simulacro funcional |
+| Perfilamiento y seguimiento | Implementada parcialmente / avanzada | Sesiones, respuestas, estadísticas, evolución y retroalimentación |
+| Selección adaptativa | Pendiente | Debe convertir el historial de desempeño en decisiones de selección |
+| Validación final | Pendiente | Pruebas de integración, usabilidad, rendimiento y aceptación |
+| Cierre | Pendiente | Documentación final, ajustes y entrega del prototipo |
+
+
+
 
 ## 8. Requerimientos
 
