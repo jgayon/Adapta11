@@ -31,7 +31,7 @@ function validarPregunta(body) {
   const eje = materia && EJES_POR_MATERIA[materia].includes(body.eje) ? body.eje : null;
   const correcta = LETRAS.includes((body.respuesta_correcta || '').toLowerCase())
     ? body.respuesta_correcta.toLowerCase() : null;
-  const textoId = body.texto_id ? Number(body.texto_id) : null;
+  const textoId = body.texto_id ? String(body.texto_id) : null;
 
   if (!materia) errores.push('Selecciona una materia valida.');
   if (materia && !competencia) errores.push('Selecciona una competencia valida para esa materia.');
@@ -109,9 +109,10 @@ async function completarGrupos(preguntas) {
   const resultado = preguntas.filter((q) => !q.texto_id);
   const textosValidos = [];
   for (const textoId of idsTexto) {
-    const texto = await db.get('SELECT * FROM textos WHERE id = ?', [textoId]);
+    const texto = await db.porId('textos', textoId);
     if (!texto) continue;
-    const miembros = await db.all('SELECT * FROM questions WHERE texto_id = ? AND activo = 1', [textoId]);
+    const miembrosTexto = await db.leer('questions', { texto_id: textoId });
+    const miembros = miembrosTexto.filter((q) => q.activo === true);
     // Todavia no hay suficientes preguntas activas para completar ni un solo
     // grupo del tamano pedido: el texto no se muestra como grupo mientras no
     // se alcance esa cantidad.
@@ -168,27 +169,24 @@ function barajarConservandoGrupos(preguntas) {
 // opcionalmente, por competencia y/o eje tematico (clasificacion oficial del
 // Icfes). Si no se indica competencia/eje, se toman preguntas de toda la
 // materia.
+//
+// Roble no tiene "ORDER BY RANDOM() LIMIT n" ni filtra por booleanos de
+// forma confiable: se trae del banco todo lo que cumpla materia/competencia/
+// eje (filtros de texto, seguros), se filtra "activo" en JavaScript y de ahi
+// se baraja y se recorta a la cantidad pedida.
 router.get('/practice', requireAuth, asyncHandler(async (req, res) => {
   const { materia, competencia, eje } = req.query;
   const count = Math.min(Math.max(Number(req.query.count) || 5, 1), 20);
   if (!MATERIAS.includes(materia)) {
     return res.status(400).json({ error: 'Materia invalida.' });
   }
-  const condiciones = ['activo = 1', 'materia = ?'];
-  const params = [materia];
-  if (COMPETENCIAS_POR_MATERIA[materia].includes(competencia)) {
-    condiciones.push('competencia = ?');
-    params.push(competencia);
-  }
-  if (EJES_POR_MATERIA[materia].includes(eje)) {
-    condiciones.push('eje = ?');
-    params.push(eje);
-  }
-  params.push(count);
-  const rows = await db.all(
-    `SELECT * FROM questions WHERE ${condiciones.join(' AND ')} ORDER BY RANDOM() LIMIT ?`,
-    params
-  );
+  const filtros = { materia };
+  if (COMPETENCIAS_POR_MATERIA[materia].includes(competencia)) filtros.competencia = competencia;
+  if (EJES_POR_MATERIA[materia].includes(eje)) filtros.eje = eje;
+
+  const candidatas = await db.leer('questions', filtros);
+  const activas = candidatas.filter((q) => q.activo === true);
+  const rows = barajar(activas).slice(0, count);
   const { preguntas, textos } = await completarGrupos(rows);
   res.json({ preguntas, textos });
 }));
@@ -208,11 +206,9 @@ router.get('/simulacro-pool', requireAuth, asyncHandler(async (req, res) => {
     // solo calibra la mezcla interna de preguntas; no se muestra al usuario).
     const porNivel = Math.max(1, Math.round(porMateria / 3));
     for (const dificultad of DIFICULTADES) {
-      const rows = await db.all(
-        `SELECT * FROM questions WHERE activo = 1 AND materia = ? AND dificultad = ? ORDER BY RANDOM() LIMIT ?`,
-        [materia, dificultad, porNivel]
-      );
-      preguntas.push(...rows);
+      const candidatas = await db.leer('questions', { materia, dificultad });
+      const activas = candidatas.filter((q) => q.activo === true);
+      preguntas.push(...barajar(activas).slice(0, porNivel));
     }
   }
   const completo = await completarGrupos(preguntas);
@@ -223,20 +219,24 @@ router.get('/simulacro-pool', requireAuth, asyncHandler(async (req, res) => {
 
 router.get('/', requireAdmin, asyncHandler(async (req, res) => {
   const { materia, competencia, eje } = req.query;
-  const condiciones = ['q.activo = 1'];
-  const params = [];
-  if (MATERIAS.includes(materia)) { condiciones.push('q.materia = ?'); params.push(materia); }
+  const filtros = {};
+  if (MATERIAS.includes(materia)) filtros.materia = materia;
   if (materia && COMPETENCIAS_POR_MATERIA[materia] && COMPETENCIAS_POR_MATERIA[materia].includes(competencia)) {
-    condiciones.push('q.competencia = ?'); params.push(competencia);
+    filtros.competencia = competencia;
   }
   if (materia && EJES_POR_MATERIA[materia] && EJES_POR_MATERIA[materia].includes(eje)) {
-    condiciones.push('q.eje = ?'); params.push(eje);
+    filtros.eje = eje;
   }
-  const rows = await db.all(
-    `SELECT q.*, t.contenido as texto_contenido FROM questions q LEFT JOIN textos t ON t.id = q.texto_id
-     WHERE ${condiciones.join(' AND ')} ORDER BY q.id DESC`,
-    params
-  );
+
+  const [candidatas, textos] = await Promise.all([
+    db.leer('questions', filtros),
+    db.leer('textos')
+  ]);
+  const textosPorId = new Map(textos.map((t) => [t.id, t]));
+  const rows = candidatas
+    .filter((q) => q.activo === true)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+    .map((q) => ({ ...q, texto_contenido: q.texto_id ? (textosPorId.get(q.texto_id) || {}).contenido : null }));
   res.json({ preguntas: rows });
 }));
 
@@ -250,16 +250,25 @@ router.get('/taxonomia', requireAuth, asyncHandler(async (req, res) => {
 // /:id para que "/textos" no se interprete como un id de pregunta.
 router.get('/textos', requireAdmin, asyncHandler(async (req, res) => {
   const { materia } = req.query;
-  const condiciones = [];
-  const params = [];
-  if (MATERIAS.includes(materia)) { condiciones.push('t.materia = ?'); params.push(materia); }
-  const where = condiciones.length ? 'WHERE ' + condiciones.join(' AND ') : '';
-  const textos = await db.all(`
-    SELECT t.id, t.materia, t.contenido, t.cantidad_preguntas, t.preguntas_por_grupo, t.created_at,
-      (SELECT COUNT(*) FROM questions q WHERE q.texto_id = t.id AND q.activo = 1) as num_preguntas
-    FROM textos t ${where} ORDER BY t.created_at DESC
-  `, params);
-  res.json({ textos });
+  const filtros = {};
+  if (MATERIAS.includes(materia)) filtros.materia = materia;
+
+  const [textos, todasLasPreguntas] = await Promise.all([
+    db.leer('textos', filtros),
+    db.leer('questions')
+  ]);
+  const resultado = textos
+    .map((t) => ({
+      id: t.id,
+      materia: t.materia,
+      contenido: t.contenido,
+      cantidad_preguntas: t.cantidad_preguntas,
+      preguntas_por_grupo: t.preguntas_por_grupo,
+      created_at: t.created_at,
+      num_preguntas: todasLasPreguntas.filter((q) => q.texto_id === t.id && q.activo === true).length
+    }))
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  res.json({ textos: resultado });
 }));
 
 router.post('/textos', requireAdmin, asyncHandler(async (req, res) => {
@@ -296,79 +305,65 @@ router.post('/textos', requireAdmin, asyncHandler(async (req, res) => {
   }
   if (!materia) return res.status(400).json({ error: 'Selecciona una materia valida para el texto.' });
   if (!contenido) return res.status(400).json({ error: 'El contenido del texto es obligatorio.' });
-  const info = await db.run(
-    'INSERT INTO textos (materia, contenido, cantidad_preguntas, preguntas_por_grupo, created_by) VALUES (?, ?, ?, ?, ?)',
-    [materia, contenido, cantidadPreguntas, preguntasPorGrupo, req.user.id]
-  );
-  const texto = await db.get('SELECT * FROM textos WHERE id = ?', [info.lastInsertRowid]);
+
+  const texto = await db.crear('textos', {
+    materia,
+    contenido,
+    cantidad_preguntas: cantidadPreguntas,
+    preguntas_por_grupo: preguntasPorGrupo,
+    created_by: req.user.id
+  });
   res.status(201).json({ texto });
 }));
 
 router.get('/:id', requireAdmin, asyncHandler(async (req, res) => {
-  const pregunta = await db.get(
-    `SELECT q.*, t.contenido as texto_contenido FROM questions q LEFT JOIN textos t ON t.id = q.texto_id WHERE q.id = ?`,
-    [req.params.id]
-  );
+  const pregunta = await db.porId('questions', req.params.id);
   if (!pregunta) return res.status(404).json({ error: 'Pregunta no encontrada.' });
-  res.json({ pregunta });
+  const texto = pregunta.texto_id ? await db.porId('textos', pregunta.texto_id) : null;
+  res.json({ pregunta: { ...pregunta, texto_contenido: texto ? texto.contenido : null } });
 }));
 
 router.post('/', requireAdmin, asyncHandler(async (req, res) => {
   const { errores, normalizado } = validarPregunta(req.body || {});
   if (errores.length) return res.status(400).json({ error: errores.join(' ') });
   if (normalizado.texto_id) {
-    const texto = await db.get('SELECT * FROM textos WHERE id = ?', [normalizado.texto_id]);
+    const texto = await db.porId('textos', normalizado.texto_id);
     if (!texto || texto.materia !== normalizado.materia) {
       return res.status(400).json({ error: 'El texto compartido seleccionado no existe o no corresponde a la materia elegida.' });
     }
   }
 
-  const info = await db.run(`
-    INSERT INTO questions
-      (materia, dificultad, competencia, eje, texto_base, texto_id, enunciado, opcion_a, opcion_b, opcion_c, opcion_d, respuesta_correcta, explicacion, imagen, activo, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-  `, [
-    normalizado.materia, normalizado.dificultad, normalizado.competencia, normalizado.eje, normalizado.texto_base, normalizado.texto_id, normalizado.enunciado,
-    normalizado.opcion_a, normalizado.opcion_b, normalizado.opcion_c, normalizado.opcion_d,
-    normalizado.respuesta_correcta, normalizado.explicacion, normalizado.imagen, req.user.id
-  ]);
-
-  const pregunta = await db.get('SELECT * FROM questions WHERE id = ?', [info.lastInsertRowid]);
+  const pregunta = await db.crear('questions', {
+    ...normalizado,
+    activo: true,
+    created_by: req.user.id
+  });
   res.status(201).json({ pregunta });
 }));
 
 router.put('/:id', requireAdmin, asyncHandler(async (req, res) => {
-  const existente = await db.get('SELECT * FROM questions WHERE id = ?', [req.params.id]);
+  const existente = await db.porId('questions', req.params.id);
   if (!existente) return res.status(404).json({ error: 'Pregunta no encontrada.' });
 
   const { errores, normalizado } = validarPregunta(req.body || {});
   if (errores.length) return res.status(400).json({ error: errores.join(' ') });
   if (normalizado.texto_id) {
-    const texto = await db.get('SELECT * FROM textos WHERE id = ?', [normalizado.texto_id]);
+    const texto = await db.porId('textos', normalizado.texto_id);
     if (!texto || texto.materia !== normalizado.materia) {
       return res.status(400).json({ error: 'El texto compartido seleccionado no existe o no corresponde a la materia elegida.' });
     }
   }
 
-  await db.run(`
-    UPDATE questions SET materia=?, dificultad=?, competencia=?, eje=?, texto_base=?, texto_id=?, enunciado=?, opcion_a=?, opcion_b=?,
-      opcion_c=?, opcion_d=?, respuesta_correcta=?, explicacion=?, imagen=?
-    WHERE id=?
-  `, [
-    normalizado.materia, normalizado.dificultad, normalizado.competencia, normalizado.eje, normalizado.texto_base, normalizado.texto_id, normalizado.enunciado,
-    normalizado.opcion_a, normalizado.opcion_b, normalizado.opcion_c, normalizado.opcion_d,
-    normalizado.respuesta_correcta, normalizado.explicacion, normalizado.imagen, req.params.id
-  ]);
-
-  const pregunta = await db.get('SELECT * FROM questions WHERE id = ?', [req.params.id]);
+  const pregunta = await db.actualizar('questions', req.params.id, normalizado);
   res.json({ pregunta });
 }));
 
 // Baja logica: no se borra fisicamente porque puede haber respuestas de
 // estudiantes que ya la referencian (exam_answers.question_id).
 router.delete('/:id', requireAdmin, asyncHandler(async (req, res) => {
-  const info = await db.run('UPDATE questions SET activo = 0 WHERE id = ?', [req.params.id]);
-  if (info.changes === 0) return res.status(404).json({ error: 'Pregunta no encontrada.' });
+  const existente = await db.porId('questions', req.params.id);
+  if (!existente) return res.status(404).json({ error: 'Pregunta no encontrada.' });
+  await db.actualizar('questions', req.params.id, { activo: false });
   res.json({ ok: true });
 }));
 

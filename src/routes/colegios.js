@@ -12,20 +12,26 @@ const router = express.Router();
 // la primera visita a la pagina de registro.
 router.get('/', asyncHandler(async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  const colegios = await db.all('SELECT id, nombre FROM colegios ORDER BY nombre');
-  res.json({ colegios });
+  const colegios = await db.leer('colegios');
+  colegios.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  res.json({ colegios: colegios.map((c) => ({ id: c.id, nombre: c.nombre })) });
 }));
 
 // Administrador: lista con conteo de profesores y estudiantes, para el panel
 // de administracion de colegios.
 router.get('/detalle', requireAdmin, asyncHandler(async (req, res) => {
-  const colegios = await db.all(`
-    SELECT c.id, c.nombre, c.created_at,
-      (SELECT COUNT(*) FROM users WHERE colegio_id = c.id AND role = 'estudiante') as num_estudiantes,
-      (SELECT COUNT(*) FROM users WHERE colegio_id = c.id AND role = 'profesor') as num_profesores
-    FROM colegios c ORDER BY c.nombre
-  `);
-  res.json({ colegios });
+  const [colegios, usuarios] = await Promise.all([
+    db.leer('colegios'),
+    db.leer('users')
+  ]);
+  const resultado = colegios.map((c) => ({
+    id: c.id,
+    nombre: c.nombre,
+    created_at: c.created_at,
+    num_estudiantes: usuarios.filter((u) => u.colegio_id === c.id && u.role === 'estudiante').length,
+    num_profesores: usuarios.filter((u) => u.colegio_id === c.id && u.role === 'profesor').length
+  })).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  res.json({ colegios: resultado });
 }));
 
 // Administrador: crear un colegio nuevo.
@@ -43,8 +49,7 @@ router.post('/', requireAdmin, asyncHandler(async (req, res) => {
     return res.status(409).json({ error: `Ya existe un colegio registrado como "${existente.nombre}".` });
   }
 
-  const info = await db.run('INSERT INTO colegios (nombre) VALUES (?)', [nombre]);
-  const colegio = await db.get('SELECT * FROM colegios WHERE id = ?', [info.lastInsertRowid]);
+  const colegio = await db.crear('colegios', { nombre });
   res.status(201).json({ colegio });
 }));
 

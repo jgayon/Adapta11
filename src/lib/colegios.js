@@ -5,8 +5,14 @@ const db = require('../db');
 // vez de crear registros duplicados. Se usa tanto en el registro publico de
 // estudiantes como en la creacion manual de colegios por el administrador,
 // para que ambos caminos se comporten igual.
+//
+// Roble solo filtra por igualdad exacta (no tiene LOWER() ni operadores), asi
+// que la comparacion sin distinguir mayusculas se hace aqui, en JavaScript,
+// sobre la lista completa de colegios (son pocos: uno por institucion).
 async function buscarColegioPorNombre(nombre) {
-  return db.get('SELECT id, nombre FROM colegios WHERE LOWER(nombre) = LOWER(?)', [nombre]);
+  const buscado = nombre.trim().toLowerCase();
+  const colegios = await db.leer('colegios');
+  return colegios.find((c) => c.nombre.trim().toLowerCase() === buscado) || null;
 }
 
 // Busca un colegio por nombre y, si no existe, lo crea. Asi el estudiante
@@ -18,10 +24,11 @@ async function obtenerOCrearColegio(nombre) {
   const existente = await buscarColegioPorNombre(nombre);
   if (existente) return existente.id;
   try {
-    const info = await db.run('INSERT INTO colegios (nombre) VALUES (?)', [nombre]);
-    return info.lastInsertRowid;
+    const colegio = await db.crear('colegios', { nombre });
+    return colegio.id;
   } catch (err) {
-    // Condicion de carrera: alguien registro el mismo colegio justo antes.
+    // Condicion de carrera: alguien registro el mismo colegio justo antes
+    // (colegios.nombre tiene una restriccion UNIQUE en Roble).
     const otra = await buscarColegioPorNombre(nombre);
     if (otra) return otra.id;
     throw err;

@@ -26,6 +26,11 @@ function publicUser(u) {
   };
 }
 
+async function buscarUsuarioPorEmail(email) {
+  const filas = await db.leer('users', { email });
+  return filas[0] || null;
+}
+
 // Registro publico -> siempre crea una cuenta de tipo "estudiante", ligada a
 // un colegio (obligatorio). No existe registro publico de administrador ni
 // de profesor (los profesores los crea el administrador, ver admin.js).
@@ -51,20 +56,24 @@ router.post('/register', asyncHandler(async (req, res) => {
   if (colegioNombre.length > 150) {
     return res.status(400).json({ error: 'El nombre del colegio es demasiado largo.' });
   }
-  const colegioIdNum = await obtenerOCrearColegio(colegioNombre);
+  const colegioId = await obtenerOCrearColegio(colegioNombre);
 
-  const existing = await db.get('SELECT id FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+  const emailNormalizado = email.toLowerCase().trim();
+  const existing = await buscarUsuarioPorEmail(emailNormalizado);
   if (existing) {
     return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
   }
 
   const hash = bcrypt.hashSync(password, 10);
-  const info = await db.run(
-    'INSERT INTO users (nombre, apellidos, email, password_hash, role, colegio_id) VALUES (?, ?, ?, ?, ?, ?)',
-    [nombre.trim(), apellidos.trim(), email.toLowerCase().trim(), hash, 'estudiante', colegioIdNum]
-  );
+  const user = await db.crear('users', {
+    nombre: nombre.trim(),
+    apellidos: apellidos.trim(),
+    email: emailNormalizado,
+    password_hash: hash,
+    role: 'estudiante',
+    colegio_id: colegioId
+  });
 
-  const user = await db.get('SELECT * FROM users WHERE id = ?', [info.lastInsertRowid]);
   const token = signToken(user);
   res.cookie('token', token, COOKIE_OPTS);
   res.json({ user: publicUser(user) });
@@ -78,7 +87,7 @@ router.post('/login', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Correo o contrasena invalidos.' });
   }
 
-  const user = await db.get('SELECT * FROM users WHERE email = ?', [email.toLowerCase().trim()]);
+  const user = await buscarUsuarioPorEmail(email.toLowerCase().trim());
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     return res.status(401).json({ error: 'Correo o contrasena incorrectos.' });
   }
@@ -94,7 +103,7 @@ router.post('/logout', (req, res) => {
 });
 
 router.get('/me', requireAuth, asyncHandler(async (req, res) => {
-  const user = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+  const user = await db.porId('users', req.user.id);
   if (!user) return res.status(401).json({ error: 'Usuario no encontrado.' });
   res.json({ user: publicUser(user) });
 }));

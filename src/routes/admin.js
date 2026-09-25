@@ -11,74 +11,26 @@ function validEmail(email) {
   return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// El administrador de la plataforma crea las cuentas de administrador de
-// colegio (profesor): no existe registro publico para este rol.
-router.post('/profesores', requireAdmin, asyncHandler(async (req, res) => {
-  const { nombre, apellidos, email, password, colegio_id } = req.body || {};
-  if (!nombre || !nombre.trim()) return res.status(400).json({ error: 'El nombre es obligatorio.' });
-  if (!apellidos || !apellidos.trim()) return res.status(400).json({ error: 'Los apellidos son obligatorios.' });
-  if (!validEmail(email)) return res.status(400).json({ error: 'Correo electronico invalido.' });
-  if (!password || password.length < 6) return res.status(400).json({ error: 'La contrasena debe tener al menos 6 caracteres.' });
-  const colegioIdNum = Number(colegio_id);
-  if (!colegioIdNum) return res.status(400).json({ error: 'Selecciona el colegio que administrara este profesor.' });
-
-  const colegio = await db.get('SELECT id, nombre FROM colegios WHERE id = ?', [colegioIdNum]);
-  if (!colegio) return res.status(400).json({ error: 'El colegio seleccionado no existe.' });
-
-  const existing = await db.get('SELECT id FROM users WHERE email = ?', [email.toLowerCase().trim()]);
-  if (existing) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
-
-  const hash = bcrypt.hashSync(password, 10);
-  const info = await db.run(
-    'INSERT INTO users (nombre, apellidos, email, password_hash, role, colegio_id) VALUES (?, ?, ?, ?, ?, ?)',
-    [nombre.trim(), apellidos.trim(), email.toLowerCase().trim(), hash, 'profesor', colegioIdNum]
-  );
-  const profesor = await db.get(
-    'SELECT id, nombre, apellidos, email, colegio_id, created_at FROM users WHERE id = ?',
-    [info.lastInsertRowid]
-  );
-  res.status(201).json({ profesor: { ...profesor, colegio_nombre: colegio.nombre } });
-}));
-
-// Lista de profesores (administradores de colegio) ya creados, con el nombre
-// de su colegio, para el panel de administracion.
-router.get('/profesores', requireAdmin, asyncHandler(async (req, res) => {
-  const profesores = await db.all(`
-    SELECT u.id, u.nombre, u.apellidos, u.email, u.colegio_id, u.created_at, c.nombre as colegio_nombre
-    FROM users u LEFT JOIN colegios c ON c.id = u.colegio_id
-    WHERE u.role = 'profesor' ORDER BY u.nombre
-  `);
-  res.json({ profesores });
-}));
-
-// Lista de estudiantes con progreso agregado (no solo el numero de
-// estudiantes: nombre, correo y sus estadisticas). El administrador ve todos
-// los colegios; puede filtrar opcionalmente por uno solo con ?colegio_id=.
-router.get('/students', requireAdmin, asyncHandler(async (req, res) => {
-  const colegioId = Number(req.query.colegio_id) || null;
-  const estudiantes = colegioId
-    ? await db.all(
-      `SELECT id, nombre, apellidos, email, created_at FROM users WHERE role = 'estudiante' AND colegio_id = ? ORDER BY nombre`,
-      [colegioId]
-    )
-    : await db.all(
-      `SELECT id, nombre, apellidos, email, created_at FROM users WHERE role = 'estudiante' ORDER BY nombre`
-    );
-  const rows = await db.all(`
-    SELECT user_id,
-           COUNT(*) as num_sesiones,
-           SUM(num_preguntas) as num_preguntas,
-           SUM(num_correctas) as num_correctas,
-           MAX(fecha_inicio) as ultima_actividad
-    FROM exam_sessions
-    GROUP BY user_id
-  `);
-  const porUsuario = new Map(rows.map(r => [r.user_id, r]));
-
-  const resultado = estudiantes.map(u => {
+// Agrega, para un conjunto de estudiantes, sus estadisticas de sesiones
+// (numero de sesiones, preguntas, correctas y ultima actividad). Roble no
+// tiene GROUP BY: se trae la tabla completa de sesiones una sola vez y el
+// conteo se hace aqui.
+async function conProgreso(estudiantes) {
+  if (!estudiantes.length) return [];
+  const todasLasSesiones = await db.leer('exam_sessions');
+  const porUsuario = new Map();
+  for (const s of todasLasSesiones) {
+    if (!porUsuario.has(s.user_id)) porUsuario.set(s.user_id, { num_sesiones: 0, num_preguntas: 0, num_correctas: 0, ultima_actividad: null });
+    const g = porUsuario.get(s.user_id);
+    g.num_sesiones += 1;
+    g.num_preguntas += s.num_preguntas || 0;
+    g.num_correctas += s.num_correctas || 0;
+    if (!g.ultima_actividad || String(s.fecha_inicio) > String(g.ultima_actividad)) g.ultima_actividad = s.fecha_inicio;
+  }
+  return estudiantes.map((u) => {
     const stats = porUsuario.get(u.id);
-    const totalPreg = stats ? (stats.num_preguntas || 0) : 0;
-    const totalCorr = stats ? (stats.num_correctas || 0) : 0;
+    const totalPreg = stats ? stats.num_preguntas : 0;
+    const totalCorr = stats ? stats.num_correctas : 0;
     return {
       id: u.id,
       nombre: u.nombre,
@@ -92,7 +44,64 @@ router.get('/students', requireAdmin, asyncHandler(async (req, res) => {
       ultima_actividad: stats ? stats.ultima_actividad : null
     };
   });
+}
 
+// El administrador de la plataforma crea las cuentas de administrador de
+// colegio (profesor): no existe registro publico para este rol.
+router.post('/profesores', requireAdmin, asyncHandler(async (req, res) => {
+  const { nombre, apellidos, email, password, colegio_id } = req.body || {};
+  if (!nombre || !nombre.trim()) return res.status(400).json({ error: 'El nombre es obligatorio.' });
+  if (!apellidos || !apellidos.trim()) return res.status(400).json({ error: 'Los apellidos son obligatorios.' });
+  if (!validEmail(email)) return res.status(400).json({ error: 'Correo electronico invalido.' });
+  if (!password || password.length < 6) return res.status(400).json({ error: 'La contrasena debe tener al menos 6 caracteres.' });
+  if (!colegio_id) return res.status(400).json({ error: 'Selecciona el colegio que administrara este profesor.' });
+
+  const colegio = await db.porId('colegios', colegio_id);
+  if (!colegio) return res.status(400).json({ error: 'El colegio seleccionado no existe.' });
+
+  const emailNormalizado = email.toLowerCase().trim();
+  const existingRows = await db.leer('users', { email: emailNormalizado });
+  if (existingRows.length) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
+
+  const hash = bcrypt.hashSync(password, 10);
+  const profesor = await db.crear('users', {
+    nombre: nombre.trim(),
+    apellidos: apellidos.trim(),
+    email: emailNormalizado,
+    password_hash: hash,
+    role: 'profesor',
+    colegio_id
+  });
+  res.status(201).json({ profesor: { ...profesor, colegio_nombre: colegio.nombre } });
+}));
+
+// Lista de profesores (administradores de colegio) ya creados, con el nombre
+// de su colegio, para el panel de administracion.
+router.get('/profesores', requireAdmin, asyncHandler(async (req, res) => {
+  const [profesores, colegios] = await Promise.all([
+    db.leer('users', { role: 'profesor' }),
+    db.leer('colegios')
+  ]);
+  const colegiosPorId = new Map(colegios.map((c) => [c.id, c]));
+  const resultado = profesores
+    .map((u) => ({
+      id: u.id, nombre: u.nombre, apellidos: u.apellidos, email: u.email,
+      colegio_id: u.colegio_id, created_at: u.created_at,
+      colegio_nombre: (colegiosPorId.get(u.colegio_id) || {}).nombre || null
+    }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  res.json({ profesores: resultado });
+}));
+
+// Lista de estudiantes con progreso agregado (no solo el numero de
+// estudiantes: nombre, correo y sus estadisticas). El administrador ve todos
+// los colegios; puede filtrar opcionalmente por uno solo con ?colegio_id=.
+router.get('/students', requireAdmin, asyncHandler(async (req, res) => {
+  const colegioId = req.query.colegio_id || null;
+  const filtros = colegioId ? { role: 'estudiante', colegio_id: colegioId } : { role: 'estudiante' };
+  const estudiantes = await db.leer('users', filtros);
+  estudiantes.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  const resultado = await conProgreso(estudiantes);
   res.json({ estudiantes: resultado });
 }));
 
@@ -103,16 +112,13 @@ router.get('/students/:id/sessions', requireAdmin, asyncHandler(async (req, res)
   if (!['practica', 'simulacro'].includes(tipo)) {
     return res.status(400).json({ error: 'Indica un tipo de sesion valido (practica o simulacro).' });
   }
-  const estudiante = await db.get(
-    `SELECT id, nombre, apellidos, email FROM users WHERE id = ? AND role = 'estudiante'`,
-    [req.params.id]
-  );
-  if (!estudiante) return res.status(404).json({ error: 'Estudiante no encontrado.' });
+  const estudiante = await db.porId('users', req.params.id);
+  if (!estudiante || estudiante.role !== 'estudiante') {
+    return res.status(404).json({ error: 'Estudiante no encontrado.' });
+  }
 
-  const sesiones = await db.all(
-    `SELECT * FROM exam_sessions WHERE user_id = ? AND tipo = ? ORDER BY fecha_inicio DESC`,
-    [req.params.id, tipo]
-  );
+  const sesiones = await db.leer('exam_sessions', { user_id: req.params.id, tipo });
+  sesiones.sort((a, b) => String(b.fecha_inicio).localeCompare(String(a.fecha_inicio)));
   res.json({ estudiante, sesiones });
 }));
 
@@ -122,11 +128,10 @@ router.get('/students/:id/sessions', requireAdmin, asyncHandler(async (req, res)
 // mismo que usan el estudiante para su propio progreso y el profesor para
 // sus estudiantes: aqui solo se valida que el estudiante exista.
 router.get('/students/:id/summary', requireAdmin, asyncHandler(async (req, res) => {
-  const estudiante = await db.get(
-    `SELECT id, nombre, apellidos, email, created_at FROM users WHERE id = ? AND role = 'estudiante'`,
-    [req.params.id]
-  );
-  if (!estudiante) return res.status(404).json({ error: 'Estudiante no encontrado.' });
+  const estudiante = await db.porId('users', req.params.id);
+  if (!estudiante || estudiante.role !== 'estudiante') {
+    return res.status(404).json({ error: 'Estudiante no encontrado.' });
+  }
 
   const data = await resumenEstudiante(estudiante.id);
   res.json({ estudiante, ...data });
@@ -136,8 +141,11 @@ router.get('/students/:id/summary', requireAdmin, asyncHandler(async (req, res) 
 // entre colegios, para que el administrador vea de un vistazo cual
 // necesita mas apoyo, igual que el profesor lo ve entre sus estudiantes.
 router.get('/resumen', requireAdmin, asyncHandler(async (req, res) => {
-  const estudiantes = await db.all(`SELECT id, colegio_id FROM users WHERE role = 'estudiante'`);
-  const colegios = await db.all(`SELECT id, nombre FROM colegios ORDER BY nombre`);
+  const [estudiantes, colegios] = await Promise.all([
+    db.leer('users', { role: 'estudiante' }),
+    db.leer('colegios')
+  ]);
+  colegios.sort((a, b) => a.nombre.localeCompare(b.nombre));
   if (!estudiantes.length) {
     return res.json({
       resumen: { total_estudiantes: 0, total_colegios: colegios.length, num_sesiones: 0, num_practicas: 0, num_simulacros: 0, num_preguntas: 0, num_correctas: 0, porcentaje_aciertos: 0, por_materia: [], por_competencia: [], por_eje: [], tiempos: { promedio_general: null, promedio_correcta: null, promedio_incorrecta: null } },
@@ -145,26 +153,23 @@ router.get('/resumen', requireAdmin, asyncHandler(async (req, res) => {
     });
   }
 
-  const data = await resumenParaUsuarios(estudiantes.map((e) => e.id));
+  const [data, todasLasSesiones] = await Promise.all([
+    resumenParaUsuarios(estudiantes.map((e) => e.id)),
+    db.leer('exam_sessions')
+  ]);
 
   const comparativaColegios = [];
   for (const c of colegios) {
-    const idsColegio = estudiantes.filter((e) => e.colegio_id === c.id).map((e) => e.id);
-    if (!idsColegio.length) continue;
-    const placeholders = idsColegio.map(() => '?').join(',');
-    const fila = await db.get(`
-      SELECT COUNT(*) as num_sesiones,
-             COALESCE(SUM(num_preguntas), 0) as num_preguntas,
-             COALESCE(SUM(num_correctas), 0) as num_correctas
-      FROM exam_sessions WHERE user_id IN (${placeholders})
-    `, idsColegio);
-    const numPreg = fila ? (fila.num_preguntas || 0) : 0;
-    const numCorr = fila ? (fila.num_correctas || 0) : 0;
+    const idsColegio = new Set(estudiantes.filter((e) => e.colegio_id === c.id).map((e) => e.id));
+    if (!idsColegio.size) continue;
+    const sesionesColegio = todasLasSesiones.filter((s) => idsColegio.has(s.user_id));
+    const numPreg = sesionesColegio.reduce((a, s) => a + (s.num_preguntas || 0), 0);
+    const numCorr = sesionesColegio.reduce((a, s) => a + (s.num_correctas || 0), 0);
     comparativaColegios.push({
       colegio_id: c.id,
       colegio_nombre: c.nombre,
-      num_estudiantes: idsColegio.length,
-      num_sesiones: fila ? fila.num_sesiones : 0,
+      num_estudiantes: idsColegio.size,
+      num_sesiones: sesionesColegio.length,
       num_preguntas: numPreg,
       num_correctas: numCorr,
       porcentaje_aciertos: numPreg ? Math.round((numCorr / numPreg) * 100) : 0

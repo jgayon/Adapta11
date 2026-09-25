@@ -21,20 +21,16 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
   const tiempo = Math.max(0, Math.round(Number(tiempo_segundos) || 0));
 
   const ids = [...new Set(respuestas.map(r => r.question_id).filter(Boolean))];
-  let preguntas = [];
-  if (ids.length) {
-    const placeholders = ids.map(() => '?').join(',');
-    preguntas = await db.all(
-      `SELECT id, materia, dificultad, competencia, eje, enunciado, texto_base, opcion_a, opcion_b, opcion_c, opcion_d, respuesta_correcta, explicacion FROM questions WHERE id IN (${placeholders})`,
-      ids
-    );
-  }
+  // Roble no soporta "WHERE id IN (...)": se trae el banco completo de
+  // preguntas y se filtra aqui por los ids que aparecen en esta sesion.
+  const todasLasPreguntas = ids.length ? await db.leer('questions') : [];
+  const preguntas = db.dondeEn(todasLasPreguntas, 'id', ids);
   const porId = new Map(preguntas.map(p => [p.id, p]));
 
   const respuestasNormalizadas = respuestas.map((r, idx) => {
     const q = porId.get(r.question_id);
     const respuestaUsuario = r.respuesta_usuario ? String(r.respuesta_usuario).toLowerCase() : null;
-    const correcta = q && respuestaUsuario ? (respuestaUsuario === q.respuesta_correcta ? 1 : 0) : 0;
+    const correcta = !!(q && respuestaUsuario && respuestaUsuario === q.respuesta_correcta);
     // El tiempo por pregunta lo cronometra el navegador (no es un dato que
     // afecte la calificacion), asi que solo se acota a un rango razonable.
     const tiempoPregunta = Math.max(0, Math.min(3600, Math.round(Number(r.tiempo_segundos) || 0)));
@@ -67,22 +63,45 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
   }
 
   const materiasTexto = Array.isArray(materias) && materias.length ? materias.join(',') : null;
-  const infoSesion = await db.run(`
-    INSERT INTO exam_sessions (user_id, tipo, materia, dificultad, competencia, eje, materias, num_preguntas, num_correctas, tiempo_segundos, nivel_estimado, fecha_fin)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-  `, [
-    req.user.id, tipo, materia || null, dificultad || null, competencia || null, eje || null, materiasTexto,
-    respuestasNormalizadas.length, numCorrectas, tiempo, nivelEstimado
-  ]);
+  const sesion = await db.crear('exam_sessions', {
+    user_id: req.user.id,
+    tipo,
+    materia: materia || null,
+    dificultad: dificultad || null,
+    competencia: competencia || null,
+    eje: eje || null,
+    materias: materiasTexto,
+    num_preguntas: respuestasNormalizadas.length,
+    num_correctas: numCorrectas,
+    tiempo_segundos: tiempo,
+    nivel_estimado: nivelEstimado,
+    fecha_fin: new Date().toISOString()
+  });
 
-  const sessionId = infoSesion.lastInsertRowid;
-  const statements = respuestasNormalizadas.map((a) => ({
-    sql: `INSERT INTO exam_answers (session_id, question_id, orden, materia, dificultad, competencia, eje, respuesta_usuario, correcta, tiempo_segundos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [sessionId, a.question_id, a.orden, a.materia, a.dificultad, a.competencia, a.eje, a.respuesta_usuario, a.correcta, a.tiempo_segundos]
+  const filas = respuestasNormalizadas.map((a) => ({
+    session_id: sesion.id,
+    question_id: a.question_id,
+    orden: a.orden,
+    materia: a.materia,
+    dificultad: a.dificultad,
+    competencia: a.competencia,
+    eje: a.eje,
+    respuesta_usuario: a.respuesta_usuario,
+    correcta: a.correcta,
+    tiempo_segundos: a.tiempo_segundos
   }));
-  await db.batch(statements);
+  const resultadoInsercion = await db.crearVarias('exam_answers', filas);
+  if (resultadoInsercion.skipped.length) {
+    // No pasa a diario: la sesion (con su nota final) ya quedo guardada; solo
+    // se pierde el detalle de esas respuestas puntuales para la retro y las
+    // estadisticas. Se deja constancia en el log del servidor para poder
+    // revisarlo si se repite.
+    console.error(
+      `[sessions] ${resultadoInsercion.skipped.length} respuestas no se pudieron guardar (sesion ${sesion.id}):`,
+      resultadoInsercion.skipped
+    );
+  }
 
-  const sesion = await db.get('SELECT * FROM exam_sessions WHERE id = ?', [sessionId]);
   const detalle = construirRetroalimentacion(respuestasNormalizadas);
   res.status(201).json({ sesion, detalle });
 }));
@@ -136,16 +155,10 @@ function construirRetroalimentacion(respuestasNormalizadas) {
 
 router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const { tipo } = req.query;
-  const condiciones = ['user_id = ?'];
-  const params = [req.user.id];
-  if (['practica', 'simulacro'].includes(tipo)) {
-    condiciones.push('tipo = ?');
-    params.push(tipo);
-  }
-  const rows = await db.all(
-    `SELECT * FROM exam_sessions WHERE ${condiciones.join(' AND ')} ORDER BY fecha_inicio DESC`,
-    params
-  );
+  const filtros = { user_id: req.user.id };
+  if (['practica', 'simulacro'].includes(tipo)) filtros.tipo = tipo;
+  const rows = await db.leer('exam_sessions', filtros);
+  rows.sort((a, b) => String(b.fecha_inicio).localeCompare(String(a.fecha_inicio)));
   res.json({ sesiones: rows });
 }));
 
@@ -162,22 +175,22 @@ router.get('/summary', requireAuth, asyncHandler(async (req, res) => {
 // Retroalimentacion detallada de una sesion propia ya finalizada (para
 // revisarla despues, no solo justo al terminarla).
 router.get('/:id', requireAuth, asyncHandler(async (req, res) => {
-  const sesion = await db.get('SELECT * FROM exam_sessions WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
-  if (!sesion) return res.status(404).json({ error: 'Sesion no encontrada.' });
+  const sesion = await db.porId('exam_sessions', req.params.id);
+  if (!sesion || sesion.user_id !== req.user.id) {
+    return res.status(404).json({ error: 'Sesion no encontrada.' });
+  }
 
-  const respuestas = await db.all(`
-    SELECT ea.orden, ea.materia, ea.dificultad, ea.competencia, ea.eje, ea.correcta, ea.tiempo_segundos,
-           ea.respuesta_usuario, q.enunciado, q.texto_base, q.opcion_a, q.opcion_b, q.opcion_c, q.opcion_d,
-           q.respuesta_correcta, q.explicacion
-    FROM exam_answers ea LEFT JOIN questions q ON q.id = ea.question_id
-    WHERE ea.session_id = ? ORDER BY ea.orden ASC
-  `, [sesion.id]);
+  const [respuestas, todasLasPreguntas] = await Promise.all([
+    db.leer('exam_answers', { session_id: sesion.id }),
+    db.leer('questions')
+  ]);
+  respuestas.sort((a, b) => a.orden - b.orden);
+  const porId = new Map(todasLasPreguntas.map((q) => [q.id, q]));
 
   const respuestasNormalizadas = respuestas.map((r) => ({
     orden: r.orden, materia: r.materia, dificultad: r.dificultad, competencia: r.competencia, eje: r.eje,
     correcta: r.correcta, tiempo_segundos: r.tiempo_segundos, respuesta_usuario: r.respuesta_usuario,
-    _pregunta: { enunciado: r.enunciado, texto_base: r.texto_base, opcion_a: r.opcion_a, opcion_b: r.opcion_b,
-      opcion_c: r.opcion_c, opcion_d: r.opcion_d, respuesta_correcta: r.respuesta_correcta, explicacion: r.explicacion }
+    _pregunta: porId.get(r.question_id) || null
   }));
 
   const detalle = construirRetroalimentacion(respuestasNormalizadas);

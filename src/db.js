@@ -1,288 +1,199 @@
-const path = require('path');
-const fs = require('fs');
-const { createClient } = require('@libsql/client');
+// Capa de acceso a datos sobre Roble (Uninorte OpenLab), en reemplazo de la
+// base de datos SQLite/Turso anterior (@libsql/client).
+//
+// Roble NO ofrece SQL crudo para que lo use la app (eso solo existe en la
+// "Consola SQL" del panel de Roble, que se uso una sola vez, a mano, para
+// crear las 6 tablas - ver claude/plan-migracion-roble.md en el proyecto de
+// Claude). Su API REST para la app solo da CRUD simple por tabla:
+//   - leer, con filtros de IGUALDAD exacta (sin JOIN, sin operadores, sin IN)
+//   - crear uno o varios registros (Roble asigna un _id UUID a cada uno)
+//   - actualizar/borrar un registro por su _id
+// Por eso, todo lo que antes hacia SQLite - JOIN, SUM/AVG/COUNT/GROUP BY,
+// ORDER BY RANDOM(), IN (...) - ahora se hace en JavaScript, sobre los datos
+// ya traidos. La logica de agregacion mas pesada vive en lib/estadisticas.js.
+//
+// El backend inicia sesion en Roble UNA sola vez, al arrancar, con una
+// "cuenta de servicio" (no es una cuenta de estudiante/profesor real: ver
+// ROBLE_SERVICE_EMAIL/ROBLE_SERVICE_PASSWORD en .env) y reusa ese token de
+// sesion para todas las peticiones de todos los usuarios de la app. La
+// autenticacion propia de Adapta11 (bcrypt + JWT en cookie, ver
+// middleware/auth.js) no cambia: Roble aqui es solo el almacen de datos.
 
-// Si TURSO_DATABASE_URL esta definida, la app se conecta a una base de datos
-// remota gratuita en Turso (libSQL), pensada para produccion (por ejemplo,
-// desplegada en el plan gratuito de Render, que no tiene disco persistente).
-// Si no esta definida, se usa un archivo SQLite local dentro de DATA_DIR (o
-// data/ por defecto) para desarrollo y pruebas en tu propio computador.
-const dataDir = process.env.DATA_DIR
-  ? process.env.DATA_DIR
-  : path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+const ROBLE_BASE_URL = process.env.ROBLE_BASE_URL || 'https://roble-api.test-openlab.uninorte.edu.co';
+const ROBLE_CONTRACT_ID = process.env.ROBLE_CONTRACT_ID;
+const ROBLE_SERVICE_EMAIL = process.env.ROBLE_SERVICE_EMAIL;
+const ROBLE_SERVICE_PASSWORD = process.env.ROBLE_SERVICE_PASSWORD;
 
-const url = process.env.TURSO_DATABASE_URL || `file:${path.join(dataDir, 'rutasaber.db')}`;
-const authToken = process.env.TURSO_AUTH_TOKEN || undefined;
+if (!ROBLE_CONTRACT_ID || !ROBLE_SERVICE_EMAIL || !ROBLE_SERVICE_PASSWORD) {
+  throw new Error(
+    'Faltan variables de entorno de Roble: revisa ROBLE_CONTRACT_ID, ' +
+    'ROBLE_SERVICE_EMAIL y ROBLE_SERVICE_PASSWORD en tu .env / .roble.mcp.env'
+  );
+}
 
-const client = createClient(authToken ? { url, authToken } : { url });
+let accessToken = null;
+let loginEnCurso = null;
 
-// El cliente de libSQL puede devolver identificadores muy grandes como
-// BigInt. En esta app los ids siempre caben en un Number normal, asi que se
-// convierten para que se puedan usar sin problemas (por ejemplo con
-// JSON.stringify, que no soporta BigInt).
-function normalizeRow(row) {
-  if (!row) return row;
-  const out = {};
-  for (const [k, v] of Object.entries(row)) {
-    out[k] = typeof v === 'bigint' ? Number(v) : v;
+async function iniciarSesionServicio() {
+  const res = await fetch(`${ROBLE_BASE_URL}/auth/${ROBLE_CONTRACT_ID}/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: ROBLE_SERVICE_EMAIL, password: ROBLE_SERVICE_PASSWORD })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.accessToken) {
+    throw new Error(
+      `No se pudo iniciar sesion en Roble con la cuenta de servicio (${res.status}): ` +
+      (data && (data.message || data.error) || 'respuesta inesperada')
+    );
   }
-  return out;
-}
-function normalizeRows(rows) {
-  return rows.map(normalizeRow);
+  accessToken = data.accessToken;
+  return accessToken;
 }
 
-async function run(sql, args = {}) {
-  const res = await client.execute({ sql, args });
+function asegurarSesion() {
+  if (accessToken) return Promise.resolve(accessToken);
+  if (!loginEnCurso) {
+    loginEnCurso = iniciarSesionServicio().finally(() => { loginEnCurso = null; });
+  }
+  return loginEnCurso;
+}
+
+// Ejecuta una peticion autenticada contra la API de Roble. Si el token de la
+// cuenta de servicio ya vencio (401), inicia sesion de nuevo una sola vez y
+// reintenta la misma peticion.
+async function peticion(path, { method = 'GET', body, query, _reintentar = true } = {}) {
+  await asegurarSesion();
+  let url = `${ROBLE_BASE_URL}${path}`;
+  if (query) {
+    const qs = new URLSearchParams(query).toString();
+    if (qs) url += (url.includes('?') ? '&' : '?') + qs;
+  }
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined
+  });
+
+  if (res.status === 401 && _reintentar) {
+    accessToken = null;
+    return peticion(path, { method, body, query, _reintentar: false });
+  }
+
+  const texto = await res.text();
+  const data = texto ? JSON.parse(texto) : null;
+  if (!res.ok) {
+    const err = new Error((data && (data.message || data.error)) || `Error ${res.status} en ${path}`);
+    err.statusCode = res.status;
+    err.body = data;
+    throw err;
+  }
+  return data;
+}
+
+// Convierte el _id que asigna Roble en un campo "id" normal, para que el
+// resto de la app (JWT, rutas, frontend) siga usando row.id como siempre
+// hacia con el id autoincremental de SQLite (ahora es un UUID en texto, no
+// un numero, pero se usa exactamente igual: por comparacion de igualdad).
+function normalizar(fila) {
+  if (!fila) return fila;
+  const { _id, _owner, ...resto } = fila;
+  return { id: _id, ...resto };
+}
+function normalizarTodas(filas) {
+  return (filas || []).map(normalizar);
+}
+
+// ---------- CRUD generico por tabla ----------
+
+// Filtros: SOLO igualdad exacta (limitacion de Roble). No uses aqui filtros
+// de tipo boolean (activo, correcta): el valor viaja como texto en la query
+// string y no esta documentado que Roble lo compare bien contra una columna
+// boolean de Postgres. Para esos casos, trae los datos con un filtro simple
+// (materia, user_id, session_id, etc.) y filtra el booleano en JavaScript.
+async function leer(tabla, filtros) {
+  const query = { tableName: tabla };
+  if (filtros) {
+    for (const [k, v] of Object.entries(filtros)) {
+      if (v !== undefined && v !== null) query[k] = String(v);
+    }
+  }
+  const res = await peticion(`/database/${ROBLE_CONTRACT_ID}/read`, { query });
+  const filas = Array.isArray(res) ? res : (res && res.data) || [];
+  return normalizarTodas(filas);
+}
+
+async function porId(tabla, id) {
+  if (!id) return null;
+  const filas = await leer(tabla, { _id: id });
+  return filas[0] || null;
+}
+
+// Trae toda la tabla (o un subconjunto ya filtrado por igualdad) y se queda
+// solo con las filas cuyo campo `campo` esta en `valores`. Reemplaza el
+// `WHERE campo IN (...)` de SQL, que Roble no soporta.
+function dondeEn(filas, campo, valores) {
+  const set = new Set(valores.map((v) => String(v)));
+  return filas.filter((f) => set.has(String(f[campo])));
+}
+
+async function crear(tabla, datos) {
+  const fila = await peticion(`/database/${ROBLE_CONTRACT_ID}/insert-one`, {
+    method: 'POST',
+    body: { tableName: tabla, record: datos }
+  });
+  return normalizar(fila);
+}
+
+async function crearVarias(tabla, filas) {
+  if (!filas.length) return { inserted: [], skipped: [] };
+  const res = await peticion(`/database/${ROBLE_CONTRACT_ID}/insert`, {
+    method: 'POST',
+    body: { tableName: tabla, records: filas }
+  });
   return {
-    lastInsertRowid: res.lastInsertRowid !== undefined && res.lastInsertRowid !== null
-      ? Number(res.lastInsertRowid)
-      : null,
-    changes: res.rowsAffected
+    inserted: normalizarTodas(res && res.inserted),
+    skipped: (res && res.skipped) || []
   };
 }
 
-async function get(sql, args = {}) {
-  const res = await client.execute({ sql, args });
-  return normalizeRow(res.rows[0]);
+async function actualizar(tabla, id, datos) {
+  const fila = await peticion(`/database/${ROBLE_CONTRACT_ID}/update`, {
+    method: 'PUT',
+    body: { tableName: tabla, idColumn: '_id', idValue: id, updates: datos }
+  });
+  return normalizar(fila);
 }
 
-async function all(sql, args = {}) {
-  const res = await client.execute({ sql, args });
-  return normalizeRows(res.rows);
+async function borrar(tabla, id) {
+  try {
+    await peticion(`/database/${ROBLE_CONTRACT_ID}/delete`, {
+      method: 'DELETE',
+      body: { tableName: tabla, idColumn: '_id', idValue: id }
+    });
+    return true;
+  } catch (err) {
+    if (err.statusCode === 404) return false; // ya no existia
+    throw err;
+  }
 }
 
-// Ejecuta varias sentencias de forma atomica (todas o ninguna).
-async function batch(statements) {
-  if (!statements.length) return;
-  await client.batch(statements, 'write');
-}
-
-async function execMultiple(sql) {
-  await client.executeMultiple(sql);
-}
-
-let schemaReady = null;
+// Antes creaba las tablas (CREATE TABLE IF NOT EXISTS...) y corria
+// migraciones. Las tablas de Roble ya existen (se crearon una sola vez desde
+// la Consola SQL del panel), asi que ahora esta funcion solo confirma que la
+// cuenta de servicio puede iniciar sesion, para fallar rapido al arrancar si
+// falta configuracion en vez de fallar en la primera peticion de un usuario.
+let listo = null;
 function initSchema() {
-  if (schemaReady) return schemaReady;
-  schemaReady = execMultiple(`
-    CREATE TABLE IF NOT EXISTS colegios (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nombre TEXT NOT NULL UNIQUE,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nombre TEXT NOT NULL,
-      apellidos TEXT NOT NULL DEFAULT '',
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('estudiante','profesor','administrador')) DEFAULT 'estudiante',
-      colegio_id INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(colegio_id) REFERENCES colegios(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS textos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      materia TEXT NOT NULL CHECK(materia IN ('lectura_critica','matematicas')),
-      contenido TEXT NOT NULL,
-      created_by INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(created_by) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS questions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      materia TEXT NOT NULL CHECK(materia IN ('lectura_critica','matematicas')),
-      dificultad TEXT NOT NULL CHECK(dificultad IN ('facil','media','dificil')),
-      competencia TEXT,
-      eje TEXT,
-      texto_base TEXT,
-      texto_id INTEGER,
-      enunciado TEXT NOT NULL,
-      opcion_a TEXT NOT NULL,
-      opcion_b TEXT NOT NULL,
-      opcion_c TEXT NOT NULL,
-      opcion_d TEXT NOT NULL,
-      respuesta_correcta TEXT NOT NULL CHECK(respuesta_correcta IN ('a','b','c','d')),
-      explicacion TEXT,
-      imagen TEXT,
-      activo INTEGER NOT NULL DEFAULT 1,
-      created_by INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(created_by) REFERENCES users(id),
-      FOREIGN KEY(texto_id) REFERENCES textos(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS exam_sessions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      tipo TEXT NOT NULL CHECK(tipo IN ('practica','simulacro')),
-      materia TEXT,
-      dificultad TEXT,
-      competencia TEXT,
-      eje TEXT,
-      materias TEXT,
-      num_preguntas INTEGER NOT NULL DEFAULT 0,
-      num_correctas INTEGER NOT NULL DEFAULT 0,
-      tiempo_segundos INTEGER NOT NULL DEFAULT 0,
-      nivel_estimado TEXT,
-      fecha_inicio TEXT NOT NULL DEFAULT (datetime('now')),
-      fecha_fin TEXT,
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS exam_answers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id INTEGER NOT NULL,
-      question_id INTEGER,
-      orden INTEGER NOT NULL,
-      materia TEXT NOT NULL,
-      dificultad TEXT NOT NULL,
-      competencia TEXT,
-      eje TEXT,
-      respuesta_usuario TEXT,
-      correcta INTEGER NOT NULL DEFAULT 0,
-      tiempo_segundos INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(session_id) REFERENCES exam_sessions(id),
-      FOREIGN KEY(question_id) REFERENCES questions(id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_questions_materia_dificultad ON questions(materia, dificultad, activo);
-    CREATE INDEX IF NOT EXISTS idx_sessions_user ON exam_sessions(user_id);
-    CREATE INDEX IF NOT EXISTS idx_answers_session ON exam_answers(session_id);
-  `);
-  return schemaReady
-    .then(() => migrateUsersRole())
-    .then(() => migrateColumns())
-    .then(() => fusionarColegiosDuplicados())
-    .then(() => createExtraIndexes());
-}
-
-// Migracion de reconstruccion de tabla: SQLite no permite alterar un CHECK ya
-// existente, asi que para agregar el rol "profesor" (administrador de
-// colegio) hay que recrear la tabla users. Es idempotente: solo corre si la
-// definicion actual de la tabla todavia no incluye 'profesor'.
-async function migrateUsersRole() {
-  const row = await get(`SELECT sql FROM sqlite_master WHERE type='table' AND name='users'`);
-  if (!row || !row.sql || row.sql.includes('profesor')) return;
-  console.log('[db] Migracion aplicada: users.role (+profesor) y users.colegio_id');
-  // questions.created_by y exam_sessions.user_id tienen FOREIGN KEY hacia
-  // users(id); en Turso/libSQL (a diferencia de un archivo SQLite local) esa
-  // restriccion se aplica por defecto, asi que hay que desactivarla mientras
-  // se hace el DROP+RENAME (receta estandar de SQLite para reconstruir una
-  // tabla). "DROP TABLE IF EXISTS users_new" al inicio hace que la migracion
-  // se pueda reintentar sin problemas si un intento anterior quedo a medias.
-  await execMultiple(`
-    PRAGMA foreign_keys=OFF;
-    DROP TABLE IF EXISTS users_new;
-    CREATE TABLE users_new (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nombre TEXT NOT NULL,
-      apellidos TEXT NOT NULL DEFAULT '',
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('estudiante','profesor','administrador')) DEFAULT 'estudiante',
-      colegio_id INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(colegio_id) REFERENCES colegios(id)
-    );
-    INSERT INTO users_new (id, nombre, apellidos, email, password_hash, role, created_at)
-      SELECT id, nombre, apellidos, email, password_hash, role, created_at FROM users;
-    DROP TABLE users;
-    ALTER TABLE users_new RENAME TO users;
-    PRAGMA foreign_keys=ON;
-  `);
-}
-
-// Migracion ligera e idempotente: agrega columnas nuevas a bases de datos que
-// ya existian antes de introducir ejes/competencias y el tiempo por pregunta,
-// sin afectar los datos historicos (sesiones y respuestas ya guardadas). Debe
-// correr antes de crear indices sobre esas columnas, porque CREATE TABLE IF
-// NOT EXISTS no modifica una tabla que ya existia con el esquema viejo.
-async function migrateColumns() {
-  const migrations = [
-    { table: 'questions', column: 'competencia', ddl: 'ALTER TABLE questions ADD COLUMN competencia TEXT' },
-    { table: 'questions', column: 'eje', ddl: 'ALTER TABLE questions ADD COLUMN eje TEXT' },
-    { table: 'exam_answers', column: 'competencia', ddl: 'ALTER TABLE exam_answers ADD COLUMN competencia TEXT' },
-    { table: 'exam_answers', column: 'eje', ddl: 'ALTER TABLE exam_answers ADD COLUMN eje TEXT' },
-    { table: 'exam_answers', column: 'tiempo_segundos', ddl: 'ALTER TABLE exam_answers ADD COLUMN tiempo_segundos INTEGER NOT NULL DEFAULT 0' },
-    { table: 'exam_sessions', column: 'competencia', ddl: 'ALTER TABLE exam_sessions ADD COLUMN competencia TEXT' },
-    { table: 'exam_sessions', column: 'eje', ddl: 'ALTER TABLE exam_sessions ADD COLUMN eje TEXT' },
-    { table: 'exam_sessions', column: 'materias', ddl: 'ALTER TABLE exam_sessions ADD COLUMN materias TEXT' },
-    { table: 'questions', column: 'texto_id', ddl: 'ALTER TABLE questions ADD COLUMN texto_id INTEGER REFERENCES textos(id)' },
-    { table: 'users', column: 'colegio_id', ddl: 'ALTER TABLE users ADD COLUMN colegio_id INTEGER REFERENCES colegios(id)' },
-    // Cuantas preguntas se planearon para este texto compartido al crearlo
-    // (el administrador ahora la indica de una vez, ver POST /questions/textos
-    // y el modal "Crear texto con varias preguntas"). Se usa para decidir
-    // cuando un grupo de preguntas ya esta completo y se debe mostrar junto
-    // al estudiante; los textos viejos, creados antes de este cambio, quedan
-    // en NULL y usan un minimo por defecto (ver MINIMO_GRUPO_DEFECTO en
-    // routes/questions.js).
-    { table: 'textos', column: 'cantidad_preguntas', ddl: 'ALTER TABLE textos ADD COLUMN cantidad_preguntas INTEGER' },
-    // Cuantas de esas preguntas se le muestran juntas al estudiante en cada
-    // intento (puede ser menos que cantidad_preguntas: por ejemplo, un texto
-    // con 5 preguntas creadas puede mostrarse con solo 3 cada vez, elegidas
-    // al azar, distintas en cada intento). Ver objetivoGrupo() en
-    // routes/questions.js.
-    { table: 'textos', column: 'preguntas_por_grupo', ddl: 'ALTER TABLE textos ADD COLUMN preguntas_por_grupo INTEGER' }
-  ];
-  for (const { table, column, ddl } of migrations) {
-    const cols = await all(`PRAGMA table_info(${table})`);
-    const exists = cols.some((c) => c.name === column);
-    if (!exists) {
-      await run(ddl);
-      console.log(`[db] Migracion aplicada: ${table}.${column}`);
-    }
+  if (!listo) {
+    listo = asegurarSesion().then(() => {
+      console.log('[db] Conectado a Roble (proyecto ' + ROBLE_CONTRACT_ID + ') como cuenta de servicio.');
+    });
   }
+  return listo;
 }
 
-// Repara datos existentes: antes de que la creacion manual de colegios (ver
-// routes/colegios.js) comparara nombres sin distinguir mayusculas, era
-// posible terminar con dos filas de "colegios" para el mismo colegio (por
-// ejemplo "Sagrada Familia" creada por el administrador y "sagrada familia"
-// creada automaticamente al registrarse un estudiante), cada una con
-// estudiantes/profesores distintos. Esta migracion agrupa los colegios que
-// solo difieren en mayusculas/minusculas, elige como canonico el que ya
-// tenga mas usuarios asociados (en empate, el de id mas antiguo), reasigna
-// a ese los usuarios de los demas y elimina las filas duplicadas. Es
-// idempotente: una vez fusionados no quedan duplicados, asi que en
-// despliegues siguientes no hace nada.
-async function fusionarColegiosDuplicados() {
-  const colegios = await all('SELECT id, nombre FROM colegios');
-  const grupos = new Map();
-  for (const c of colegios) {
-    const key = c.nombre.trim().toLowerCase();
-    if (!grupos.has(key)) grupos.set(key, []);
-    grupos.get(key).push(c);
-  }
-  for (const grupo of grupos.values()) {
-    if (grupo.length < 2) continue;
-    const conConteo = [];
-    for (const c of grupo) {
-      const row = await get('SELECT COUNT(*) as n FROM users WHERE colegio_id = ?', [c.id]);
-      conConteo.push({ ...c, n: row ? row.n : 0 });
-    }
-    conConteo.sort((a, b) => (b.n - a.n) || (a.id - b.id));
-    const canonico = conConteo[0];
-    const duplicados = conConteo.slice(1);
-    for (const dup of duplicados) {
-      await run('UPDATE users SET colegio_id = ? WHERE colegio_id = ?', [canonico.id, dup.id]);
-      await run('DELETE FROM colegios WHERE id = ?', [dup.id]);
-      console.log(`[db] Colegios fusionados: "${dup.nombre}" (id=${dup.id}) -> "${canonico.nombre}" (id=${canonico.id})`);
-    }
-  }
-}
-
-async function createExtraIndexes() {
-  await run('CREATE INDEX IF NOT EXISTS idx_questions_materia_competencia ON questions(materia, competencia, activo)');
-  await run('CREATE INDEX IF NOT EXISTS idx_questions_materia_eje ON questions(materia, eje, activo)');
-  await run('CREATE INDEX IF NOT EXISTS idx_questions_texto ON questions(texto_id)');
-  await run('CREATE INDEX IF NOT EXISTS idx_users_colegio ON users(colegio_id)');
-}
-
-module.exports = { run, get, all, batch, execMultiple, initSchema, client };
+module.exports = { leer, porId, dondeEn, crear, crearVarias, actualizar, borrar, initSchema };

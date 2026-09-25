@@ -8,23 +8,27 @@ const ADMIN_NOMBRE = process.env.ADMIN_NOMBRE || 'Administrador';
 const ADMIN_APELLIDOS = process.env.ADMIN_APELLIDOS || 'Ruta Saber';
 
 async function seedAdmin() {
-  const existente = await db.get('SELECT * FROM users WHERE email = ?', [ADMIN_EMAIL.toLowerCase()]);
+  const filas = await db.leer('users', { email: ADMIN_EMAIL.toLowerCase() });
+  const existente = filas[0] || null;
   const hash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
   if (existente) {
     // Idempotente: asegura que el rol sea administrador, pero no pisa la
     // contrasena si ya fue cambiada manualmente en la base de datos.
     if (existente.role !== 'administrador') {
-      await db.run('UPDATE users SET role = ? WHERE id = ?', ['administrador', existente.id]);
+      await db.actualizar('users', existente.id, { role: 'administrador' });
       console.log('[seed] Cuenta existente actualizada a administrador:', ADMIN_EMAIL);
     } else {
       console.log('[seed] La cuenta administrador ya existe:', ADMIN_EMAIL);
     }
     return;
   }
-  await db.run(
-    'INSERT INTO users (nombre, apellidos, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
-    [ADMIN_NOMBRE, ADMIN_APELLIDOS, ADMIN_EMAIL.toLowerCase(), hash, 'administrador']
-  );
+  await db.crear('users', {
+    nombre: ADMIN_NOMBRE,
+    apellidos: ADMIN_APELLIDOS,
+    email: ADMIN_EMAIL.toLowerCase(),
+    password_hash: hash,
+    role: 'administrador'
+  });
   console.log(`[seed] Cuenta administrador creada -> email: ${ADMIN_EMAIL}  password: ${ADMIN_PASSWORD}`);
 }
 
@@ -1163,7 +1167,7 @@ function seedQuestionsData() {
 // no se tocan, y las preguntas existentes con id propio se mantienen intactas).
 async function seedQuestions() {
   const preguntas = seedQuestionsData();
-  const existentes = await db.all('SELECT materia, enunciado FROM questions');
+  const existentes = await db.leer('questions');
   const yaExiste = new Set(existentes.map((q) => `${q.materia}::${q.enunciado}`));
 
   const nuevas = preguntas.filter((p) => !yaExiste.has(`${p.materia}::${p.enunciado}`));
@@ -1172,13 +1176,38 @@ async function seedQuestions() {
     return;
   }
 
-  const statements = nuevas.map((p) => ({
-    sql: `INSERT INTO questions (materia, dificultad, competencia, eje, texto_base, enunciado, opcion_a, opcion_b, opcion_c, opcion_d, respuesta_correcta, explicacion, imagen, activo)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)`,
-    args: [p.materia, p.dificultad, p.competencia || null, p.eje || null, p.texto_base || null, p.enunciado, p.opcion_a, p.opcion_b, p.opcion_c, p.opcion_d, p.respuesta_correcta, p.explicacion || null]
+  const registros = nuevas.map((p) => ({
+    materia: p.materia,
+    dificultad: p.dificultad,
+    competencia: p.competencia || null,
+    eje: p.eje || null,
+    texto_base: p.texto_base || null,
+    texto_id: null,
+    enunciado: p.enunciado,
+    opcion_a: p.opcion_a,
+    opcion_b: p.opcion_b,
+    opcion_c: p.opcion_c,
+    opcion_d: p.opcion_d,
+    respuesta_correcta: p.respuesta_correcta,
+    explicacion: p.explicacion || null,
+    imagen: null,
+    activo: true
   }));
-  await db.batch(statements);
-  console.log(`[seed] Se cargaron ${nuevas.length} preguntas nuevas (de ${preguntas.length} del banco oficial; ${existentes.length} ya existian).`);
+
+  // Se inserta en tandas: la API de Roble no documenta un limite por
+  // llamada a createMany, asi que se evita mandar cientos de registros de
+  // una sola vez.
+  const TAMANO_TANDA = 40;
+  let insertadas = 0;
+  for (let i = 0; i < registros.length; i += TAMANO_TANDA) {
+    const tanda = registros.slice(i, i + TAMANO_TANDA);
+    const res = await db.crearVarias('questions', tanda);
+    insertadas += res.inserted.length;
+    if (res.skipped.length) {
+      console.log(`[seed] ${res.skipped.length} preguntas de esta tanda no se pudieron insertar.`);
+    }
+  }
+  console.log(`[seed] Se cargaron ${insertadas} preguntas nuevas (de ${preguntas.length} del banco oficial; ${existentes.length} ya existian).`);
 }
 
 (async () => {
