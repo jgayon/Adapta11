@@ -12,8 +12,9 @@
 #      Render antes de desplegar: ADMIN_EMAIL, ADMIN_PASSWORD,
 #      ROBLE_SERVICE_EMAIL y ROBLE_SERVICE_PASSWORD (la cuenta de servicio
 #      de Roble, ver claude/plan-migracion-roble.md o pidela al equipo),
-#      y GMAIL_USER/GMAIL_APP_PASSWORD (para el correo de confirmacion de
-#      profesor, ver .env.example).
+#      y GMAIL_USER/BREVO_API_KEY (para el correo de confirmacion de
+#      profesor via la API de Brevo -no SMTP, Render la bloquea-, ver
+#      .env.example).
 
 services:
   - type: web
@@ -45,5 +46,5 @@ services:
         value: https://adapta11.onrender.com
       - key: GMAIL_USER
         sync: false
-      - key: GMAIL_APP_PASSWORD
+      - key: BREVO_API_KEY
         sync: false
