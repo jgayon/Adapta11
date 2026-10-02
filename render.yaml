@@ -1,14 +1,17 @@
 # Blueprint de despliegue para Render.com (plan gratuito)
 #
+# La base de datos ya no es Turso: es Roble (Uninorte OpenLab), compartida
+# por todo el equipo. Render solo hospeda el servidor Node/Express; los
+# datos viven en el proyecto de Roble `adapta11_c0f86002c5`.
+#
 # Como usarlo:
 #   1. Sube este proyecto a un repositorio de GitHub.
-#   2. Crea gratis una base de datos en Turso (ver README) y ten a mano su
-#      URL y su token.
-#   3. En Render: "New +" -> "Web Service" (o "Blueprint" si tu cuenta lo
+#   2. En Render: "New +" -> "Web Service" (o "Blueprint" si tu cuenta lo
 #      ofrece) -> conecta este repositorio.
-#   4. Completa las variables marcadas como "sync: false" en el panel de
+#   3. Completa las variables marcadas como "sync: false" en el panel de
 #      Render antes de desplegar: ADMIN_EMAIL, ADMIN_PASSWORD,
-#      TURSO_DATABASE_URL y TURSO_AUTH_TOKEN.
+#      ROBLE_SERVICE_EMAIL y ROBLE_SERVICE_PASSWORD (la cuenta de servicio
+#      de Roble, ver claude/plan-migracion-roble.md o pidela al equipo).
 
 services:
   - type: web
@@ -28,7 +31,11 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      - key: TURSO_DATABASE_URL
+      - key: ROBLE_BASE_URL
+        value: https://roble-api.test-openlab.uninorte.edu.co
+      - key: ROBLE_CONTRACT_ID
+        value: adapta11_c0f86002c5
+      - key: ROBLE_SERVICE_EMAIL
         sync: false
-      - key: TURSO_AUTH_TOKEN
+      - key: ROBLE_SERVICE_PASSWORD
         sync: false
