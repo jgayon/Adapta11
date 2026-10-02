@@ -142,7 +142,7 @@ async function completarGrupos(preguntas) {
     resultado.push(...grupoFinal);
   }
 
-  const textos = textosValidos.map((t) => ({ id: t.id, contenido: t.contenido }));
+  const textos = textosValidos.map((t) => ({ id: t.id, contenido: t.contenido, imagen: t.imagen || null }));
   return { preguntas: barajarConservandoGrupos(resultado), textos };
 }
 
@@ -244,7 +244,11 @@ router.get('/', requireAdmin, asyncHandler(async (req, res) => {
   const rows = candidatas
     .filter((q) => q.activo === true)
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
-    .map((q) => ({ ...q, texto_contenido: q.texto_id ? (textosPorId.get(q.texto_id) || {}).contenido : null }));
+    .map((q) => ({
+      ...q,
+      texto_contenido: q.texto_id ? (textosPorId.get(q.texto_id) || {}).contenido : null,
+      texto_imagen: q.texto_id ? (textosPorId.get(q.texto_id) || {}).imagen || null : null
+    }));
   res.json({ preguntas: rows });
 }));
 
@@ -270,6 +274,7 @@ router.get('/textos', requireAdmin, asyncHandler(async (req, res) => {
       id: t.id,
       materia: t.materia,
       contenido: t.contenido,
+      imagen: t.imagen || null,
       cantidad_preguntas: t.cantidad_preguntas,
       preguntas_por_grupo: t.preguntas_por_grupo,
       created_at: t.created_at,
@@ -282,6 +287,10 @@ router.get('/textos', requireAdmin, asyncHandler(async (req, res) => {
 router.post('/textos', requireAdmin, asyncHandler(async (req, res) => {
   const materia = MATERIAS.includes(req.body && req.body.materia) ? req.body.materia : null;
   const contenido = req.body && req.body.contenido ? String(req.body.contenido).trim() : '';
+  // Imagen opcional para el texto compartido (grafico, mapa, tabla, etc. que
+  // acompana la lectura), guardada igual que la imagen de una pregunta:
+  // dataURL/base64 que arma el navegador al subir el archivo.
+  const imagen = req.body && req.body.imagen ? String(req.body.imagen) : null;
   // Opcional: cuantas preguntas va a tener este texto en total. La usa el
   // modal "Crear texto con varias preguntas" para saber cuantos formularios
   // mostrar de una vez y para que completarGrupos() (ver arriba) sepa cuando
@@ -317,6 +326,7 @@ router.post('/textos', requireAdmin, asyncHandler(async (req, res) => {
   const texto = await db.crear('textos', {
     materia,
     contenido,
+    imagen,
     cantidad_preguntas: cantidadPreguntas,
     preguntas_por_grupo: preguntasPorGrupo,
     created_by: req.user.id
@@ -328,7 +338,13 @@ router.get('/:id', requireAdmin, asyncHandler(async (req, res) => {
   const pregunta = await db.porId('questions', req.params.id);
   if (!pregunta) return res.status(404).json({ error: 'Pregunta no encontrada.' });
   const texto = pregunta.texto_id ? await db.porId('textos', pregunta.texto_id) : null;
-  res.json({ pregunta: { ...pregunta, texto_contenido: texto ? texto.contenido : null } });
+  res.json({
+    pregunta: {
+      ...pregunta,
+      texto_contenido: texto ? texto.contenido : null,
+      texto_imagen: texto ? texto.imagen || null : null
+    }
+  });
 }));
 
 router.post('/', requireAdmin, asyncHandler(async (req, res) => {

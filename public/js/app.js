@@ -126,8 +126,16 @@
   // texto (buscado en el mapa que llega junto con la tanda de preguntas);
   // si no, usa su propio texto_base (lectura individual, como antes).
   function textoDe(q, textosMap) {
-    if (q && q.texto_id && textosMap && textosMap.has(q.texto_id)) return textosMap.get(q.texto_id);
+    if (q && q.texto_id && textosMap && textosMap.has(q.texto_id)) return textosMap.get(q.texto_id).contenido;
     return (q && (q.texto_contenido || q.texto_base)) || null;
+  }
+
+  // Igual que textoDe pero para la imagen opcional del texto compartido (solo
+  // aplica cuando la pregunta pertenece a un texto_id; una pregunta suelta no
+  // tiene "imagen de texto", solo su propia imagen).
+  function textoImagenDe(q, textosMap) {
+    if (q && q.texto_id && textosMap && textosMap.has(q.texto_id)) return textosMap.get(q.texto_id).imagen || null;
+    return null;
   }
 
   const ROLE_LABEL = { administrador: 'Administrador', profesor: 'Administrador de colegio', estudiante: 'Estudiante' };
@@ -1032,9 +1040,10 @@
     if (soloLectura) {
       const dividido = esLayoutDividido(p);
       const textoMostrado = p.texto_contenido || p.texto_base;
-      const bloqueFuente = (textoMostrado || p.imagen) ? `
+      const bloqueFuente = (textoMostrado || p.imagen || p.texto_imagen) ? `
           ${p.texto_id ? `<div class="texto-grupo-aviso">Texto compartido #${p.texto_id} (usado por varias preguntas).</div>` : ''}
           ${textoMostrado ? `<div class="texto-base">${escapeHtml(textoMostrado)}</div>` : ''}
+          ${p.texto_imagen ? `<img class="pregunta-img" src="${p.texto_imagen}" alt="Imagen del texto" />` : ''}
           ${p.imagen ? `<img class="pregunta-img" src="${p.imagen}" alt="Imagen de la pregunta" />` : ''}
       ` : '';
       const bloquePregunta = `
@@ -1328,7 +1337,7 @@
     const close = () => backdrop.remove();
 
     function pintarPaso1(previo) {
-      const v = previo || { materia: 'matematicas', contenido: '', cantidad: 3, mostrar: 3 };
+      const v = previo || { materia: 'matematicas', contenido: '', imagen: '', cantidad: 3, mostrar: 3 };
       backdrop.innerHTML = `
         <div class="modal">
           <div class="modal-header">
@@ -1350,6 +1359,15 @@
             <div class="field">
               <label>Texto / lectura compartida</label>
               <textarea name="contenido" id="tm-contenido" required style="min-height:160px;">${escapeHtml(v.contenido)}</textarea>
+            </div>
+            <div class="field">
+              <label>Imagen del texto (opcional)</label>
+              <input type="file" id="tm-imagen" accept="image/*" />
+              <div id="tm-preview-imagen" style="margin-top:0.4rem;">
+                ${v.imagen ? `<img src="${v.imagen}" class="pregunta-img" style="max-width:220px;" />` : ''}
+              </div>
+              ${v.imagen ? '<button type="button" class="btn btn-outline btn-sm" id="tm-quitar-imagen">Quitar imagen</button>' : ''}
+              <input type="hidden" name="imagen" id="tm-imagen-hidden" value="${v.imagen ? escapeHtml(v.imagen) : ''}" />
             </div>
             <div class="grid-2">
               <div class="field">
@@ -1378,22 +1396,41 @@
         el('tm-mostrar').max = max;
         if (Number(el('tm-mostrar').value) > max) el('tm-mostrar').value = max;
       };
+      el('tm-imagen').onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          const dataUrl = await compressImage(file);
+          el('tm-imagen-hidden').value = dataUrl;
+          el('tm-preview-imagen').innerHTML = `<img src="${dataUrl}" class="pregunta-img" style="max-width:220px;" />`;
+        } catch (err) {
+          alert('No se pudo procesar la imagen: ' + err.message);
+        }
+      };
+      const tmBtnQuitar = document.getElementById('tm-quitar-imagen');
+      if (tmBtnQuitar) {
+        tmBtnQuitar.onclick = () => {
+          el('tm-imagen-hidden').value = '';
+          el('tm-preview-imagen').innerHTML = '';
+        };
+      }
       el('form-texto-config').onsubmit = (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
         const materia = fd.get('materia');
         const contenido = String(fd.get('contenido') || '').trim();
+        const imagen = fd.get('imagen') || null;
         const cantidad = Math.min(10, Math.max(2, Number(fd.get('cantidad')) || 3));
         const mostrar = Math.min(cantidad, Math.max(2, Number(fd.get('mostrar')) || cantidad));
         if (!contenido) {
           document.getElementById('tm-error').innerHTML = '<div class="error-box">Escribe el texto compartido.</div>';
           return;
         }
-        pintarPaso2({ materia, contenido, cantidad, mostrar });
+        pintarPaso2({ materia, contenido, imagen, cantidad, mostrar });
       };
     }
 
-    function pintarPaso2({ materia, contenido, cantidad, mostrar }) {
+    function pintarPaso2({ materia, contenido, imagen, cantidad, mostrar }) {
       // El texto y cada pregunta se crean con la API que ya existe (una
       // pregunta a la vez), pero desde aca se mandan todas seguidas: primero
       // se crea el texto, y despues cada pregunta con ese texto_id. Si algo
@@ -1430,6 +1467,9 @@
               <div class="field">
                 <label>Opcion ${l.toUpperCase()}</label>
                 <input type="text" name="opcion_${l}_${i}" required />
+                <input type="file" id="tm-opcion-${l}-imagen-${i}" accept="image/*" style="margin-top:0.3rem;" />
+                <div id="tm-preview-opcion-${l}-imagen-${i}" style="margin-top:0.3rem;"></div>
+                <input type="hidden" name="opcion_${l}_imagen_${i}" id="tm-opcion-${l}-imagen-hidden-${i}" />
               </div>
             `).join('')}
           </div>
@@ -1470,7 +1510,28 @@
       `;
       el('tm-cerrar').onclick = close;
       backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
-      el('tm-volver').onclick = () => pintarPaso1({ materia, contenido, cantidad, mostrar });
+      el('tm-volver').onclick = () => pintarPaso1({ materia, contenido, imagen, cantidad, mostrar });
+
+      // Imagen opcional por cada opcion de respuesta, de cada pregunta del
+      // grupo: mismo mecanismo que en el modal de una sola pregunta.
+      for (let i = 0; i < cantidad; i++) {
+        LETRAS.forEach((l) => {
+          const input = document.getElementById(`tm-opcion-${l}-imagen-${i}`);
+          if (!input) return;
+          input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+              const dataUrl = await compressImage(file);
+              document.getElementById(`tm-opcion-${l}-imagen-hidden-${i}`).value = dataUrl;
+              document.getElementById(`tm-preview-opcion-${l}-imagen-${i}`).innerHTML =
+                `<img src="${dataUrl}" class="opcion-img" style="max-width:140px;" />`;
+            } catch (err) {
+              alert('No se pudo procesar la imagen de la opcion ' + l.toUpperCase() + ': ' + err.message);
+            }
+          };
+        });
+      }
 
       el('form-texto-preguntas').onsubmit = async (ev) => {
         ev.preventDefault();
@@ -1484,7 +1545,7 @@
           if (!textoIdCreado) {
             const dataTexto = await api('/questions/textos', {
               method: 'POST',
-              body: { materia, contenido, cantidad_preguntas: cantidad, preguntas_por_grupo: mostrar }
+              body: { materia, contenido, imagen, cantidad_preguntas: cantidad, preguntas_por_grupo: mostrar }
             });
             textoIdCreado = dataTexto.texto.id;
           }
@@ -1502,6 +1563,10 @@
                 opcion_b: fd.get(`opcion_b_${i}`),
                 opcion_c: fd.get(`opcion_c_${i}`),
                 opcion_d: fd.get(`opcion_d_${i}`),
+                opcion_a_imagen: fd.get(`opcion_a_imagen_${i}`) || null,
+                opcion_b_imagen: fd.get(`opcion_b_imagen_${i}`) || null,
+                opcion_c_imagen: fd.get(`opcion_c_imagen_${i}`) || null,
+                opcion_d_imagen: fd.get(`opcion_d_imagen_${i}`) || null,
                 respuesta_correcta: fd.get(`respuesta_correcta_${i}`),
                 explicacion: fd.get(`explicacion_${i}`) || null
               }
@@ -2106,7 +2171,7 @@
       state.estudiante.practica = {
         materia, competencia, eje,
         preguntas: data.preguntas,
-        textosMap: new Map((data.textos || []).map(t => [t.id, t.contenido])),
+        textosMap: new Map((data.textos || []).map(t => [t.id, { contenido: t.contenido, imagen: t.imagen || null }])),
         idx: 0,
         respuestas: new Array(data.preguntas.length).fill(null),
         tiempoPorPregunta: new Array(data.preguntas.length).fill(0),
@@ -2140,13 +2205,15 @@
     const esUltima = pr.idx === pr.preguntas.length - 1;
 
     const textoCompartido = textoDe(q, pr.textosMap);
+    const textoImagen = textoImagenDe(q, pr.textosMap);
     // El texto (corto o largo) siempre va a un lado, fijo; lo que cambia al
     // pasar de pregunta es solo el lado de la pregunta.
-    const dividido = !!(q.imagen || textoCompartido);
+    const dividido = !!(q.imagen || textoCompartido || textoImagen);
     const grupoTotal = q.texto_id ? pr.preguntas.filter(x => x.texto_id === q.texto_id).length : 0;
-    const bloqueFuente = (textoCompartido || q.imagen) ? `
+    const bloqueFuente = (textoCompartido || q.imagen || textoImagen) ? `
         ${(q.texto_id && textoCompartido) ? `<div class="texto-grupo-aviso">Responde las siguientes ${grupoTotal} preguntas con el texto presentado.</div>` : ''}
         ${textoCompartido ? `<div class="texto-base">${escapeHtml(textoCompartido)}</div>` : ''}
+        ${textoImagen ? `<img class="pregunta-img" src="${textoImagen}" alt="Imagen del texto" />` : ''}
         ${q.imagen ? `<img class="pregunta-img" src="${q.imagen}" alt="Imagen de la pregunta" />` : ''}
     ` : '';
     const bloquePregunta = `
@@ -2275,7 +2342,7 @@
       state.estudiante.simulacro = {
         materias,
         todas: data.preguntas,
-        textosMap: new Map((data.textos || []).map(t => [t.id, t.contenido])),
+        textosMap: new Map((data.textos || []).map(t => [t.id, { contenido: t.contenido, imagen: t.imagen || null }])),
         byMateria,
         tab: materias[0],
         pos: { lectura_critica: 0, matematicas: 0 },
@@ -2345,9 +2412,10 @@
 
       ${q ? (() => {
         const textoCompartido = textoDe(q, sm.textosMap);
+        const textoImagen = textoImagenDe(q, sm.textosMap);
         // El texto (corto o largo) siempre va a un lado, fijo; lo que
         // cambia al pasar de pregunta es solo el lado de la pregunta.
-        const dividido = !!(q.imagen || textoCompartido);
+        const dividido = !!(q.imagen || textoCompartido || textoImagen);
         const grupoTotal = q.texto_id ? sm.todas.filter(x => x.texto_id === q.texto_id).length : 0;
         const pills = `
           <div class="row question-box-pills" style="gap:0.5rem; margin-bottom:0.75rem;">
@@ -2356,9 +2424,10 @@
             <span class="pill pill-eje">${ejeLabel(q.eje)}</span>
           </div>
         `;
-        const bloqueFuente = (textoCompartido || q.imagen) ? `
+        const bloqueFuente = (textoCompartido || q.imagen || textoImagen) ? `
           ${(q.texto_id && textoCompartido) ? `<div class="texto-grupo-aviso">Responde las siguientes ${grupoTotal} preguntas con el texto presentado.</div>` : ''}
           ${textoCompartido ? `<div class="texto-base">${escapeHtml(textoCompartido)}</div>` : ''}
+          ${textoImagen ? `<img class="pregunta-img" src="${textoImagen}" alt="Imagen del texto" />` : ''}
           ${q.imagen ? `<img class="pregunta-img" src="${q.imagen}" alt="Imagen de la pregunta" />` : ''}
         ` : '';
         const bloquePregunta = `

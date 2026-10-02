@@ -39,3 +39,7 @@ CREATE TABLE refresh_tokens (
   expira TIMESTAMPTZ NOT NULL,
   revocado BOOLEAN NOT NULL DEFAULT FALSE
 );
+
+-- 4) Imagen opcional para un texto compartido (la lectura/grafico que usan
+--    varias preguntas juntas), igual que la imagen de una pregunta suelta.
+ALTER TABLE textos ADD COLUMN imagen TEXT;
