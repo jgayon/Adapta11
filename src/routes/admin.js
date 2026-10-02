@@ -1,9 +1,13 @@
 const express = require('express');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { requireAdmin } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const { resumenEstudiante, resumenParaUsuarios } = require('../lib/estadisticas');
+const { enviarConfirmacionProfesorConToken } = require('../lib/correo');
+
+const DIAS_EXPIRA_CONFIRMACION = 7;
 
 const router = express.Router();
 
@@ -64,15 +68,68 @@ router.post('/profesores', requireAdmin, asyncHandler(async (req, res) => {
   if (existingRows.length) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
 
   const hash = bcrypt.hashSync(password, 10);
+  const confirmacionToken = crypto.randomBytes(32).toString('hex');
+  const confirmacionExpira = new Date(Date.now() + DIAS_EXPIRA_CONFIRMACION * 24 * 60 * 60 * 1000).toISOString();
+
   const profesor = await db.crear('users', {
     nombre: nombre.trim(),
     apellidos: apellidos.trim(),
     email: emailNormalizado,
     password_hash: hash,
     role: 'profesor',
-    colegio_id
+    colegio_id,
+    // El profesor no puede iniciar sesion hasta que confirme el correo (ver
+    // POST /auth/login y GET /auth/confirmar en routes/auth.js).
+    email_confirmado: false,
+    confirmacion_token: confirmacionToken,
+    confirmacion_expira: confirmacionExpira
   });
-  res.status(201).json({ profesor: { ...profesor, colegio_nombre: colegio.nombre } });
+
+  let correoEnviado = true;
+  let correoError = null;
+  try {
+    await enviarConfirmacionProfesorConToken({
+      to: profesor.email,
+      nombre: profesor.nombre,
+      token: confirmacionToken
+    });
+  } catch (err) {
+    // La cuenta ya quedo creada (sin esto, un error de correo tumbaria la
+    // creacion entera y el admin tendria que reintentar todo el formulario).
+    // Se informa en la respuesta para que el admin sepa que debe reenviar o
+    // confirmar manualmente, y se deja registro en el log del servidor.
+    console.error('[admin] No se pudo enviar el correo de confirmacion al profesor', profesor.email, err);
+    correoEnviado = false;
+    correoError = err.message;
+  }
+
+  res.status(201).json({
+    profesor: { ...profesor, colegio_nombre: colegio.nombre },
+    correoEnviado,
+    correoError
+  });
+}));
+
+// Reenvia el correo de confirmacion (por si el profesor lo perdio, lo borro
+// o el primero fallo al enviarse) y renueva el token/la expiracion.
+router.post('/profesores/:id/reenviar-confirmacion', requireAdmin, asyncHandler(async (req, res) => {
+  const profesor = await db.porId('users', req.params.id);
+  if (!profesor || profesor.role !== 'profesor') {
+    return res.status(404).json({ error: 'Profesor no encontrado.' });
+  }
+  if (profesor.email_confirmado) {
+    return res.status(400).json({ error: 'Este profesor ya confirmo su correo.' });
+  }
+
+  const confirmacionToken = crypto.randomBytes(32).toString('hex');
+  const confirmacionExpira = new Date(Date.now() + DIAS_EXPIRA_CONFIRMACION * 24 * 60 * 60 * 1000).toISOString();
+  await db.actualizar('users', profesor.id, {
+    confirmacion_token: confirmacionToken,
+    confirmacion_expira: confirmacionExpira
+  });
+
+  await enviarConfirmacionProfesorConToken({ to: profesor.email, nombre: profesor.nombre, token: confirmacionToken });
+  res.json({ ok: true });
 }));
 
 // Lista de profesores (administradores de colegio) ya creados, con el nombre
@@ -87,7 +144,10 @@ router.get('/profesores', requireAdmin, asyncHandler(async (req, res) => {
     .map((u) => ({
       id: u.id, nombre: u.nombre, apellidos: u.apellidos, email: u.email,
       colegio_id: u.colegio_id, created_at: u.created_at,
-      colegio_nombre: (colegiosPorId.get(u.colegio_id) || {}).nombre || null
+      colegio_nombre: (colegiosPorId.get(u.colegio_id) || {}).nombre || null,
+      // Si es undefined (cuentas creadas antes de este cambio, antes de que
+      // la columna existiera) se trata como ya confirmado.
+      email_confirmado: u.email_confirmado !== false
     }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
   res.json({ profesores: resultado });

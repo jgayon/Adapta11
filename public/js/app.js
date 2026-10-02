@@ -18,6 +18,7 @@
     view: 'cargando', // cargando | auth | admin | profesor | estudiante
     authTab: 'login',
     authError: '',
+    authInfo: '',
     colegiosDisponibles: [], // para el select de colegio en el registro
     colegiosCargados: false, // evita volver a pedirlos en cada render si la lista esta vacia de verdad
 
@@ -40,6 +41,7 @@
       profesores: [],
       colegioError: '',
       profesorError: '',
+      profesorInfo: '',
     },
 
     profesor: {
@@ -269,6 +271,25 @@
     return { fecha: partes[0] || '-', hora: (partes[1] || '').slice(0, 5) || '-' };
   }
 
+  // El access token (cookie "token") dura poco a proposito (15 minutos, ver
+  // middleware/auth.js). Cuando una peticion llega a vencer, esta funcion
+  // intenta renovarlo una sola vez contra POST /auth/refresh (que usa la
+  // cookie separada "refresh_token", de mas larga duracion) y reintenta la
+  // peticion original antes de rendirse. Si tampoco hay refresh valido,
+  // el 401 sigue de largo y la app manda al usuario a la pantalla de login,
+  // igual que antes.
+  let refrescoEnCurso = null;
+  function pedirRefresco() {
+    if (!refrescoEnCurso) {
+      refrescoEnCurso = fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
+        .then((r) => r.ok)
+        .catch(() => false)
+        .finally(() => { refrescoEnCurso = null; });
+    }
+    return refrescoEnCurso;
+  }
+  const RUTAS_SIN_REFRESH = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'];
+
   async function api(path, opts) {
     opts = opts || {};
     const headers = {};
@@ -277,12 +298,19 @@
       headers['Content-Type'] = 'application/json';
       body = JSON.stringify(opts.body);
     }
-    const res = await fetch('/api' + path, {
+    const hacerPeticion = () => fetch('/api' + path, {
       method: opts.method || 'GET',
       headers,
       credentials: 'include',
       body
     });
+
+    let res = await hacerPeticion();
+    if (res.status === 401 && !RUTAS_SIN_REFRESH.includes(path)) {
+      const pudoRenovar = await pedirRefresco();
+      if (pudoRenovar) res = await hacerPeticion();
+    }
+
     let data = null;
     try { data = await res.json(); } catch (e) { /* respuesta sin cuerpo */ }
     if (!res.ok) {
@@ -319,7 +347,26 @@
   /* Arranque / sesion                                                  */
   /* ---------------------------------------------------------------- */
 
+  // El enlace de confirmacion de correo (ver GET /auth/confirmar en el
+  // backend) redirige de vuelta aqui con ?confirmado=1 o ?confirmado=0, para
+  // avisarle al profesor si su cuenta ya quedo activa. Se lee una sola vez al
+  // arrancar y se limpia la URL para que un refresh de la pagina no repita
+  // el mensaje.
+  function leerMensajeConfirmacion() {
+    const params = new URLSearchParams(location.search);
+    if (params.has('confirmado')) {
+      state.authInfo = params.get('confirmado') === '1'
+        ? 'Tu correo quedo confirmado. Ya puedes iniciar sesion.'
+        : '';
+      state.authError = params.get('confirmado') === '0'
+        ? 'El enlace de confirmacion no es valido o ya vencio. Pidele al administrador que te cree el acceso de nuevo.'
+        : '';
+      history.replaceState({}, '', location.pathname);
+    }
+  }
+
   async function init() {
+    leerMensajeConfirmacion();
     try {
       const data = await api('/auth/me');
       state.user = data.user;
@@ -410,6 +457,7 @@
           <div class="auth-card card">
             <h2 class="mb-0" style="font-size:1.4rem; margin-bottom:4px;">${t === 'registro' ? 'Crear cuenta' : 'Iniciar sesión'}</h2>
             <p class="hint" style="margin-bottom:10px;">${t === 'registro' ? 'Regístrate como estudiante para practicar y guardar tu progreso.' : 'Ingresa con el correo y la contraseña de tu cuenta (estudiante, profesor o administrador).'}</p>
+            ${state.authInfo ? `<div class="success-box">${escapeHtml(state.authInfo)}</div>` : ''}
             ${state.authError ? `<div class="error-box">${escapeHtml(state.authError)}</div>` : ''}
             ${t === 'login' ? formLogin() : formRegistro()}
             <div class="authmode-switch">
@@ -587,6 +635,7 @@
     ev.preventDefault();
     const fd = new FormData(ev.target);
     state.authError = '';
+    state.authInfo = '';
     try {
       const data = await api('/auth/login', { method: 'POST', body: { email: fd.get('email'), password: fd.get('password') } });
       state.user = data.user;
@@ -757,6 +806,12 @@
         <td>${escapeHtml(p.nombre)} ${escapeHtml(p.apellidos)}</td>
         <td>${escapeHtml(p.email)}</td>
         <td>${escapeHtml(p.colegio_nombre || '-')}</td>
+        <td>
+          ${p.email_confirmado
+            ? '<span class="pill pill-correcta">Confirmado</span>'
+            : '<span class="pill pill-incorrecta">Pendiente de confirmar</span>'}
+        </td>
+        <td>${p.email_confirmado ? '' : `<button type="button" class="btn btn-outline btn-sm" data-reenviar="${p.id}">Reenviar correo</button>`}</td>
       </tr>
     `).join('');
 
@@ -800,9 +855,10 @@
       </div>
       <div class="card">
         <h3>Profesores (administradores de colegio)</h3>
+        ${a.profesorInfo ? `<div class="success-box">${escapeHtml(a.profesorInfo)}</div>` : ''}
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Nombre</th><th>Correo</th><th>Colegio</th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Correo</th><th>Colegio</th><th>Estado</th><th></th></tr></thead>
             <tbody>${filasProfesores}</tbody>
           </table>
           ${!a.profesores.length ? '<div class="empty-state">Todavia no hay profesores creados.</div>' : ''}
@@ -831,14 +887,18 @@
         ev.preventDefault();
         const fd = new FormData(ev.target);
         a.profesorError = '';
+        a.profesorInfo = '';
         try {
-          await api('/admin/profesores', {
+          const data = await api('/admin/profesores', {
             method: 'POST',
             body: {
               nombre: fd.get('nombre'), apellidos: fd.get('apellidos'), email: fd.get('email'),
               password: fd.get('password'), colegio_id: fd.get('colegio_id')
             }
           });
+          a.profesorInfo = data.correoEnviado
+            ? `Se creo la cuenta y se envio un correo de confirmacion a ${data.profesor.email}. No podra iniciar sesion hasta que lo confirme.`
+            : `Se creo la cuenta, pero el correo de confirmacion no se pudo enviar (${data.correoError || 'error desconocido'}). Usa "Reenviar correo" en la tabla de abajo cuando este resuelto.`;
           await loadAdminColegios();
         } catch (err) {
           a.profesorError = err.message;
@@ -846,6 +906,21 @@
         }
       };
     }
+    app().querySelectorAll('[data-reenviar]').forEach((btn) => {
+      btn.onclick = async () => {
+        btn.disabled = true;
+        btn.textContent = 'Enviando...';
+        try {
+          await api('/admin/profesores/' + btn.dataset.reenviar + '/reenviar-confirmacion', { method: 'POST' });
+          a.profesorInfo = 'Correo de confirmacion reenviado.';
+          render();
+        } catch (err) {
+          alert('No se pudo reenviar el correo: ' + err.message);
+          btn.disabled = false;
+          btn.textContent = 'Reenviar correo';
+        }
+      };
+    });
   }
 
   /* ---------- Admin: banco de preguntas ---------- */
@@ -969,6 +1044,7 @@
               <div class="opcion readonly ${p.respuesta_correcta === l ? 'correcta' : ''}">
                 <span class="letra">${l.toUpperCase()}</span>
                 <span>${escapeHtml(p['opcion_' + l])}</span>
+                ${p['opcion_' + l + '_imagen'] ? `<img src="${p['opcion_' + l + '_imagen']}" class="opcion-img" alt="Imagen de la opcion ${l.toUpperCase()}" />` : ''}
               </div>
             `).join('')}
           </div>
@@ -1057,6 +1133,13 @@
               <div class="field">
                 <label>Opcion ${l.toUpperCase()}</label>
                 <input type="text" name="opcion_${l}" required value="${escapeHtml(p['opcion_' + l] || '')}" />
+                <label class="hint" style="margin-top:0.4rem;">Imagen de la opcion ${l.toUpperCase()} (opcional)</label>
+                <input type="file" id="input-opcion-${l}-imagen" accept="image/*" />
+                <div id="preview-opcion-${l}-imagen" style="margin-top:0.4rem;">
+                  ${p['opcion_' + l + '_imagen'] ? `<img src="${p['opcion_' + l + '_imagen']}" class="opcion-img" style="max-width:140px;" />` : ''}
+                </div>
+                <input type="hidden" name="opcion_${l}_imagen" id="input-opcion-${l}-imagen-hidden" value="${p['opcion_' + l + '_imagen'] ? escapeHtml(p['opcion_' + l + '_imagen']) : ''}" />
+                ${p['opcion_' + l + '_imagen'] ? `<button type="button" class="btn btn-ghost btn-sm" data-quitar-opcion-imagen="${l}">Quitar imagen</button>` : ''}
               </div>
             `).join('')}
           </div>
@@ -1169,6 +1252,30 @@
       };
     }
 
+    // Imagen opcional por cada opcion de respuesta: mismo mecanismo que la
+    // imagen de la pregunta (subir archivo -> comprimir -> guardar como
+    // dataURL en el campo oculto correspondiente).
+    LETRAS.forEach((l) => {
+      el('input-opcion-' + l + '-imagen').onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          const dataUrl = await compressImage(file);
+          el('input-opcion-' + l + '-imagen-hidden').value = dataUrl;
+          el('preview-opcion-' + l + '-imagen').innerHTML = `<img src="${dataUrl}" class="opcion-img" style="max-width:140px;" />`;
+        } catch (err) {
+          alert('No se pudo procesar la imagen de la opcion ' + l.toUpperCase() + ': ' + err.message);
+        }
+      };
+    });
+    app().querySelectorAll('[data-quitar-opcion-imagen]').forEach((btn) => {
+      btn.onclick = () => {
+        const l = btn.dataset.quitarOpcionImagen;
+        el('input-opcion-' + l + '-imagen-hidden').value = '';
+        el('preview-opcion-' + l + '-imagen').innerHTML = '';
+      };
+    });
+
     el('form-pregunta').onsubmit = async (ev) => {
       ev.preventDefault();
       const fd = new FormData(ev.target);
@@ -1183,6 +1290,10 @@
         opcion_b: fd.get('opcion_b'),
         opcion_c: fd.get('opcion_c'),
         opcion_d: fd.get('opcion_d'),
+        opcion_a_imagen: fd.get('opcion_a_imagen') || null,
+        opcion_b_imagen: fd.get('opcion_b_imagen') || null,
+        opcion_c_imagen: fd.get('opcion_c_imagen') || null,
+        opcion_d_imagen: fd.get('opcion_d_imagen') || null,
         respuesta_correcta: fd.get('respuesta_correcta'),
         explicacion: fd.get('explicacion'),
         imagen: fd.get('imagen') || null
@@ -2045,6 +2156,7 @@
             <button type="button" class="opcion ${seleccion === l ? 'selected' : ''}" data-letra="${l}" ${pr.pausado ? 'disabled' : ''}>
               <span class="letra">${l.toUpperCase()}</span>
               <span>${escapeHtml(q['opcion_' + l])}</span>
+              ${q['opcion_' + l + '_imagen'] ? `<img src="${q['opcion_' + l + '_imagen']}" class="opcion-img" alt="Imagen de la opcion ${l.toUpperCase()}" />` : ''}
             </button>
           `).join('')}
         </div>
@@ -2256,6 +2368,7 @@
               <button type="button" class="opcion ${seleccion === l ? 'selected' : ''}" data-letra="${l}">
                 <span class="letra">${l.toUpperCase()}</span>
                 <span>${escapeHtml(q['opcion_' + l])}</span>
+                ${q['opcion_' + l + '_imagen'] ? `<img src="${q['opcion_' + l + '_imagen']}" class="opcion-img" alt="Imagen de la opcion ${l.toUpperCase()}" />` : ''}
               </button>
             `).join('')}
           </div>
@@ -2356,6 +2469,7 @@
                     <div class="opcion readonly ${p.respuesta_correcta === l ? 'correcta' : ''} ${p.respuesta_usuario === l && p.respuesta_usuario !== p.respuesta_correcta ? 'incorrecta' : ''}">
                       <span class="letra">${l.toUpperCase()}</span>
                       <span>${escapeHtml(p.opciones[l])}</span>
+                      ${p.opcionesImagen && p.opcionesImagen[l] ? `<img src="${p.opcionesImagen[l]}" class="opcion-img" alt="Imagen de la opcion ${l.toUpperCase()}" />` : ''}
                       ${p.respuesta_usuario === l ? '<span class="hint">(tu respuesta)</span>' : ''}
                     </div>
                   `).join('')}

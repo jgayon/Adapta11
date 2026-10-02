@@ -10,14 +10,16 @@
   "scripts": {
     "start": "node src/server.js",
     "seed": "node src/seed.js",
-    "migrar-turso": "node scripts/migrar-datos-turso-a-roble.js"
+    "migrar-turso": "node scripts/migrar-datos-turso-a-roble.js",
+    "eliminar-duplicados": "node scripts/eliminar-duplicados.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.10.1"
   },
   "devDependencies": {
     "@libsql/client": "^0.17.4"

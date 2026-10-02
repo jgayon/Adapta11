@@ -349,6 +349,17 @@ textarea { min-height: 90px; resize: vertical; }
   margin-bottom: 1rem;
 }
 
+.success-box {
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid var(--success);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.9rem;
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin-bottom: 1rem;
+}
+
 .hint { color: var(--text-muted); font-size: 0.82rem; }
 
 /* ---------- Autocompletado propio (campo "Colegio" del registro) ---------- */
@@ -640,6 +651,7 @@ tr.clickable:hover { background: var(--surface-2); }
 
 .opcion {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.7rem;
   border: 1.5px solid var(--border);
@@ -649,6 +661,15 @@ tr.clickable:hover { background: var(--surface-2); }
   background: var(--surface-2);
   color: var(--text);
   text-align: left;
+}
+.opcion img.opcion-img {
+  flex-basis: 100%;
+  max-width: 220px;
+  max-height: 160px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  margin-top: 0.3rem;
 }
 .opcion:hover { border-color: var(--primary-light); }
 .opcion.selected { border-color: var(--accent); background: var(--warning-bg); }

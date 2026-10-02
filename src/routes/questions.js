@@ -63,7 +63,15 @@ function validarPregunta(body) {
       opcion_d: String(body.opcion_d || '').trim(),
       respuesta_correcta: correcta,
       explicacion: body.explicacion ? String(body.explicacion).trim() : null,
-      imagen: body.imagen ? String(body.imagen) : null
+      imagen: body.imagen ? String(body.imagen) : null,
+      // Imagen opcional por cada opcion de respuesta (ademas del texto),
+      // guardada igual que la imagen de la pregunta: dataURL/base64 que
+      // arma el navegador al subir el archivo (ver compressImage en
+      // public/js/app.js). No es obligatoria para ninguna opcion.
+      opcion_a_imagen: body.opcion_a_imagen ? String(body.opcion_a_imagen) : null,
+      opcion_b_imagen: body.opcion_b_imagen ? String(body.opcion_b_imagen) : null,
+      opcion_c_imagen: body.opcion_c_imagen ? String(body.opcion_c_imagen) : null,
+      opcion_d_imagen: body.opcion_d_imagen ? String(body.opcion_d_imagen) : null
     }
   };
 }

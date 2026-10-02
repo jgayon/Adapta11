@@ -125,6 +125,14 @@ function construirRetroalimentacion(respuestasNormalizadas) {
     opciones: a._pregunta ? {
       a: a._pregunta.opcion_a, b: a._pregunta.opcion_b, c: a._pregunta.opcion_c, d: a._pregunta.opcion_d
     } : null,
+    // Imagen opcional de cada opcion (ademas del texto de arriba), aparte
+    // para no romper nada que ya lea `opciones` esperando solo texto.
+    opcionesImagen: a._pregunta ? {
+      a: a._pregunta.opcion_a_imagen || null,
+      b: a._pregunta.opcion_b_imagen || null,
+      c: a._pregunta.opcion_c_imagen || null,
+      d: a._pregunta.opcion_d_imagen || null
+    } : null,
     respuesta_correcta: a._pregunta ? a._pregunta.respuesta_correcta : null,
     explicacion: a._pregunta ? a._pregunta.explicacion : null
   }));

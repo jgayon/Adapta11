@@ -55,6 +55,11 @@ function requireAdminOProfesor(req, res, next) {
   });
 }
 
+// El access token ahora dura poco (antes vivia 30 dias el solo). La sesion
+// larga la sostiene el refresh token (ver lib/refreshTokens.js), que es
+// revocable; el access token, al ser de corta duracion, limita el dano si se
+// llegara a filtrar. El frontend (public/js/app.js, funcion api()) renueva
+// el access token automaticamente contra POST /auth/refresh cuando vence.
 function signToken(user) {
   return jwt.sign(
     {
@@ -66,7 +71,7 @@ function signToken(user) {
       colegio_id: user.colegio_id || null
     },
     JWT_SECRET,
-    { expiresIn: '30d' }
+    { expiresIn: '15m' }
   );
 }
 

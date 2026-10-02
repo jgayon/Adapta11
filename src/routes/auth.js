@@ -4,14 +4,29 @@ const db = require('../db');
 const { signToken, requireAuth } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const { obtenerOCrearColegio } = require('../lib/colegios');
+const refreshTokens = require('../lib/refreshTokens');
 
 const router = express.Router();
 
 const isProd = process.env.NODE_ENV === 'production';
+
+// Access token: vive poco (15 min, ver middleware/auth.js) y viaja en cada
+// peticion a la API.
 const COOKIE_OPTS = {
   httpOnly: true,
   sameSite: 'lax',
   secure: isProd,
+  maxAge: 15 * 60 * 1000
+};
+// Refresh token: vive mucho mas (30 dias) pero solo viaja hacia /api/auth/*
+// (login, refresh, logout), nunca en el resto de la API, para exponerlo lo
+// menos posible. Es revocable (ver lib/refreshTokens.js): logout o un reuso
+// detectado lo invalidan sin tener que esperar a que expire solo.
+const REFRESH_COOKIE_OPTS = {
+  httpOnly: true,
+  sameSite: 'lax',
+  secure: isProd,
+  path: '/api/auth',
   maxAge: 30 * 24 * 60 * 60 * 1000
 };
 
@@ -29,6 +44,18 @@ function publicUser(u) {
 async function buscarUsuarioPorEmail(email) {
   const filas = await db.leer('users', { email });
   return filas[0] || null;
+}
+
+async function emitirSesion(res, user) {
+  const access = signToken(user);
+  const refresh = await refreshTokens.crear(user.id);
+  res.cookie('token', access, COOKIE_OPTS);
+  res.cookie('refresh_token', refresh.raw, REFRESH_COOKIE_OPTS);
+}
+
+function limpiarCookiesSesion(res) {
+  res.clearCookie('token', { httpOnly: true, sameSite: 'lax', secure: isProd });
+  res.clearCookie('refresh_token', { httpOnly: true, sameSite: 'lax', secure: isProd, path: '/api/auth' });
 }
 
 // Registro publico -> siempre crea una cuenta de tipo "estudiante", ligada a
@@ -71,11 +98,11 @@ router.post('/register', asyncHandler(async (req, res) => {
     email: emailNormalizado,
     password_hash: hash,
     role: 'estudiante',
-    colegio_id: colegioId
+    colegio_id: colegioId,
+    email_confirmado: true // el registro publico (siempre estudiante) no requiere confirmar correo
   });
 
-  const token = signToken(user);
-  res.cookie('token', token, COOKIE_OPTS);
+  await emitirSesion(res, user);
   res.json({ user: publicUser(user) });
 }));
 
@@ -92,20 +119,75 @@ router.post('/login', asyncHandler(async (req, res) => {
     return res.status(401).json({ error: 'Correo o contrasena incorrectos.' });
   }
 
-  const token = signToken(user);
-  res.cookie('token', token, COOKIE_OPTS);
+  // Las cuentas de profesor las crea el administrador (ver admin.js) con
+  // email_confirmado=false y un correo de confirmacion enviado al profesor;
+  // no pueden entrar hasta que confirmen. Estudiantes y administradores no
+  // pasan por esto (email_confirmado=true desde que se crean).
+  if (user.role === 'profesor' && user.email_confirmado === false) {
+    return res.status(403).json({
+      error: 'Todavia no confirmas tu correo. Revisa tu bandeja de entrada (y spam) y entra al enlace de confirmacion antes de iniciar sesion.'
+    });
+  }
+
+  await emitirSesion(res, user);
   res.json({ user: publicUser(user) });
 }));
 
-router.post('/logout', (req, res) => {
-  res.clearCookie('token', { httpOnly: true, sameSite: 'lax', secure: isProd });
+router.post('/logout', asyncHandler(async (req, res) => {
+  const refreshCookie = req.cookies && req.cookies.refresh_token;
+  if (refreshCookie) await refreshTokens.revocar(refreshCookie);
+  limpiarCookiesSesion(res);
   res.json({ ok: true });
-});
+}));
+
+// Renueva el access token usando el refresh token (cookie aparte, de mas
+// larga duracion). El frontend llama esto solo (ver public/js/app.js,
+// funcion api()) cuando una peticion normal responde 401 por access token
+// vencido; no hace falta que el usuario haga nada.
+router.post('/refresh', asyncHandler(async (req, res) => {
+  const refreshCookie = req.cookies && req.cookies.refresh_token;
+  const resultado = refreshCookie ? await refreshTokens.rotar(refreshCookie) : null;
+  if (!resultado) {
+    limpiarCookiesSesion(res);
+    return res.status(401).json({ error: 'Sesion vencida, inicia sesion de nuevo.' });
+  }
+
+  const user = await db.porId('users', resultado.userId);
+  if (!user) {
+    limpiarCookiesSesion(res);
+    return res.status(401).json({ error: 'Usuario no encontrado.' });
+  }
+
+  res.cookie('token', signToken(user), COOKIE_OPTS);
+  res.cookie('refresh_token', resultado.raw, REFRESH_COOKIE_OPTS);
+  res.json({ ok: true });
+}));
 
 router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const user = await db.porId('users', req.user.id);
   if (!user) return res.status(401).json({ error: 'Usuario no encontrado.' });
   res.json({ user: publicUser(user) });
+}));
+
+// Enlace que recibe el profesor por correo (ver lib/correo.js y admin.js).
+// Es publico a proposito: el propio token largo e impredecible en la URL es
+// la prueba de que quien entra es el dueño del correo, no hace falta sesion.
+router.get('/confirmar', asyncHandler(async (req, res) => {
+  const token = req.query.token ? String(req.query.token) : '';
+  const filas = token ? await db.leer('users', { confirmacion_token: token }) : [];
+  const user = filas[0] || null;
+  const vencido = user && user.confirmacion_expira && new Date(user.confirmacion_expira) < new Date();
+
+  if (!user || vencido) {
+    return res.redirect('/?confirmado=0');
+  }
+
+  await db.actualizar('users', user.id, {
+    email_confirmado: true,
+    confirmacion_token: null,
+    confirmacion_expira: null
+  });
+  res.redirect('/?confirmado=1');
 }));
 
 module.exports = router;
