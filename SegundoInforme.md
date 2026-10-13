@@ -17,6 +17,17 @@ La validación realizada sobre el material entregado permite comprobar la cohere
 El proyecto utiliza el concepto de **aprendizaje adaptativo** como referencia para orientar la personalización de la práctica. En el primer informe, este concepto se relacionó con la posibilidad de utilizar información del desempeño para seleccionar preguntas pertinentes. En la implementación actual existe la infraestructura necesaria para almacenar respuestas, aciertos, tiempos, materia, competencia, eje y dificultad, pero la decisión automática de selección basada en ese historial aún no está implementada.
 
 Otro concepto fundamental es el **banco estructurado de preguntas**. Cada pregunta almacenada en la base de datos contiene información de clasificación que permite filtrarla por materia, dificultad, competencia y eje temático. Esta estructura permite que la aplicación no trate todas las preguntas como elementos equivalentes, sino como recursos que pueden recuperarse de acuerdo con diferentes criterios de práctica.
+Mecanismos de selección de preguntas
+
+Se distinguen dos mecanismos de selección que el informe anterior mezclaba:
+
+Selección dirigida (implementada). El estudiante elige materia y, opcionalmente, competencia y eje; el sistema devuelve preguntas activas que cumplen el filtro, en orden aleatorio. La decisión es del estudiante.
+Selección adaptativa (pendiente). El sistema decide qué preguntas presentar a partir del historial del estudiante. La decisión es del sistema y debe poder justificarse.
+2.1 Aprendizaje adaptativo y selección de ítems
+
+En evaluación, los tests adaptativos computarizados seleccionan cada ítem según la estimación actual de la habilidad del examinado, usando modelos de teoría de respuesta al ítem (TRI) (Lord, 1980; Embretson y Reise, 2000; van der Linden y Glas, 2000). Su objetivo es medir con precisión, no necesariamente enseñar.
+
+En contextos de práctica y aprendizaje, el objetivo cambia: se busca que el estudiante mejore. Para eso se han propuesto modelos que estiman el dominio de cada habilidad a lo largo del tiempo, como el seguimiento del conocimiento bayesiano (Corbett y Anderson, 1995) y sus variantes con redes neuronales (Piech et al., 2015), y sistemas de calificación tipo Elo adaptados a la educación, que son simples y fáciles de explicar (Pelánek, 2016).
 
 También se utiliza el concepto de **seguimiento del desempeño**. Las tablas `exam_sessions` y `exam_answers` permiten conservar el resultado de las sesiones y el detalle de cada respuesta. Sobre estos datos, el módulo `src/lib/estadisticas.js` calcula indicadores generales, desgloses por materia, competencia y eje, tiempos promedio y evolución sesión a sesión. De esta manera, el proyecto cuenta con una base de datos de desempeño que puede servir posteriormente como entrada para un seleccionador adaptativo.
 
@@ -55,6 +66,14 @@ Los objetivos específicos relacionados con la construcción del banco, la selec
 El objetivo relacionado con la selección adaptativa automática continúa parcialmente pendiente. La infraestructura de datos ya permite calcular indicadores de desempeño, pero todavía se requiere implementar la regla o algoritmo que transforme esos indicadores en una selección automática de preguntas. Por tanto, el objetivo general se encuentra avanzado, pero la personalización adaptativa debe ser considerada una prioridad del cierre.
 
 ## 5. Estado del arte / soluciones relacionadas
+Se compararon soluciones con criterios que pueden verificarse en su documentación pública:
+
+1.Alineación con Saber 11.
+2.Preguntas clasificadas por competencia/eje.
+3.Seguimiento del desempeño por competencia.
+4.Selección adaptativa documentada.
+5.Explicación al estudiante de por qué se le asigna una pregunta o tema.
+6.Vista para docentes o colegios.
 
 ## 6. Solución propuesta
 
@@ -326,3 +345,7 @@ La tercera prioridad corresponde a la validación con usuarios y al cierre docum
 
 
 ## 16. Referencias
+1.La República (6 de julio de 2019). El Icfes habilitó herramienta de simulacro en línea para sus próximas pruebas Saber. https://www.larepublica.co/economia/el-icfes-habilito-herramienta-de-simulacro-en-linea-para-sus-proximas-pruebas-saber-2882118
+2.El Universal (19 de febrero de 2020). Icfes activa de forma permanente un simulacro para las pruebas Saber 11.
+3.Sabero. Descripción en Product Hunt. https://hunted.space/product/sabero
+4.Supertest Tech Inc. Ficha en App Store. https://mwm.ai/apps/supertest/6761273273
