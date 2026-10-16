@@ -12,6 +12,14 @@ La validación realizada sobre el material entregado permite comprobar la cohere
 
 ## 1. Introducción
 
+La preparación para las pruebas Saber 11 se apoya cada vez más en plataformas digitales: simulacros oficiales, aplicaciones comerciales y cursos virtuales. Sin embargo, buena parte de esas herramientas presenta conjuntos de preguntas similares para todos los estudiantes. El resultado es que un estudiante puede invertir su tiempo limitado en contenidos que ya domina mientras recibe poca práctica en las competencias donde falla. El Primer Informe formuló esta situación como la necesidad central del proyecto (véase [Primer Informe, sección 1](./PrimerInforme.md#1-introducción)).
+
+La oportunidad identificada consiste en aprovechar la información que el propio sistema recoge (respuestas, aciertos, tiempos, competencia, eje y dificultad) para que la práctica sea más pertinente, sin depender de la generación automática de preguntas. Adapta 11 plantea dos modalidades de selección: una dirigida por el estudiante, que ya funciona, y una adaptativa basada en su historial, que es el principal pendiente.
+
+Desde el primer informe el proyecto avanzó de la definición conceptual a un prototipo que se puede recorrer de extremo a extremo: un estudiante se registra, practica por competencia, presenta un simulacro, revisa la retroalimentación de cada pregunta y consulta su progreso, mientras profesores y administradores ven información agregada. También hubo cambios técnicos relevantes, entre ellos la migración de la base de datos a Roble y el endurecimiento de la autenticación con tokens de renovación revocables.
+
+Este informe documenta ese estado con honestidad sobre sus límites. Reporta lo verificable en el repositorio, separa lo implementado de lo propuesto y deja explícito que la selección adaptativa, sus ventajas esperadas y el desempeño del sistema bajo carga son todavía hipótesis y actividades de cierre.
+
 ## 2. Marco conceptual
 
 El proyecto utiliza el concepto de **aprendizaje adaptativo** como referencia para orientar la personalización de la práctica. En el primer informe, este concepto se relacionó con la posibilidad de utilizar información del desempeño para seleccionar preguntas pertinentes. En la implementación actual existe la infraestructura necesaria para almacenar respuestas, aciertos, tiempos, materia, competencia, eje y dificultad, pero la decisión automática de selección basada en ese historial aún no está implementada.
@@ -74,6 +82,41 @@ Se compararon soluciones con criterios que pueden verificarse en su documentaci�
 4.Selección adaptativa documentada.
 5.Explicación al estudiante de por qué se le asigna una pregunta o tema.
 6.Vista para docentes o colegios.
+
+Véase el planteamiento original en el [Primer Informe, sección 6](./PrimerInforme.md#6-estado-del-arte--soluciones-relacionadas).
+
+### 5.1 Método y alcance de la comparación
+
+Se compararon soluciones de preparación para Saber 11 con criterios que pueden contrastarse con documentación pública: (1) alineación con Saber 11; (2) preguntas clasificadas por competencia o eje; (3) seguimiento del desempeño por competencia; (4) selección adaptativa documentada, es decir, con la regla o el modelo descritos públicamente; (5) explicación al estudiante de por qué se le asigna una pregunta o tema; y (6) vista para docentes o colegios. La tabla distingue **Documentado** (la fuente lo afirma), **Declarado** (afirmación comercial sin detalle técnico) y **No documentado** (la fuente consultada no lo menciona). *No documentado no significa que no exista*: las fuentes son fichas de producto y prensa, y no se probó ninguna plataforma.
+
+### 5.2 Soluciones de preparación para Saber 11
+
+| Criterio | El Icfes tiene un Preicfes (Icfes) | Oesaber | Sabero | Supertest |
+|---|---|---|---|---|
+| 1. Alineación con Saber 11 | Documentado: plataforma del Icfes con las cinco áreas | Declarado: simula el formato de Saber 11 | Declarado: preguntas "tipo ICFES" y simulacros de las cinco áreas | Declarado: simulacros Saber 11 y Saber Pro |
+| 2. Clasificación por competencia/eje | No documentado | No documentado | No documentado | Declarado: materia, componente y competencia |
+| 3. Seguimiento por competencia | No documentado | Declarado: diagnóstico y análisis de fortalezas y debilidades | Declarado: análisis por materia | Declarado: análisis por materia y competencia |
+| 4. Selección adaptativa documentada | Declarado: "prueba adaptativa" con motor adaptativo; algoritmo no publicado en las fuentes | Declarado: adapta contenidos y ejercicios; sin detalle | Declarado: coach de IA y puntaje por TRI; sin detalle | Declarado: misiones diarias que se ajustan a los resultados; sin detalle |
+| 5. Explica por qué asigna cada pregunta | No documentado | No documentado | Parcial: tutor que explica cada pregunta, pero no por qué se asignó | No documentado |
+| 6. Vista para docentes o colegios | No documentado | No documentado | No documentado | No documentado |
+
+Fuentes: La República (2019) y El Universal (2020) para el Icfes; Enter.co (s. f.) para Oesaber; Sabero (s. f.) y Supertest Tech Inc. (2026). Las fichas de Sabero y Supertest son autodescripciones de sus proveedores, y las notas de prensa sobre el Icfes datan de 2019 y 2020, por lo que no se verificó su disponibilidad actual.
+
+### 5.3 Aprendizaje adaptativo y recomendación de ítems
+
+| Enfoque | Qué decide | Fortaleza | Limitación para Adapta 11 | Fuente |
+|---|---|---|---|---|
+| Test adaptativo computarizado (TRI) | El ítem más informativo según la habilidad estimada | Medición precisa con pocos ítems | Exige ítems calibrados con muchas respuestas; el banco semilla no lo está | Lord (1980); van der Linden y Glas (2000) |
+| Seguimiento del conocimiento | Probabilidad de dominio de cada habilidad | Modela el aprendizaje en el tiempo | Requiere mapeo ítem–habilidad y datos para ajustar parámetros | Corbett y Anderson (1995); Piech et al. (2015) |
+| Práctica adaptativa con Elo | Ítems de dificultad apropiada según la habilidad estimada | Simple, robusta y explicable | Necesita volumen de respuestas para estabilizar dificultades | Klinkenberg et al. (2011); Pelánek (2016); Pelánek et al. (2017) |
+| Bandidos / muestreo de Thompson | Qué unidad practicar, equilibrando explotación y exploración | Maneja la incertidumbre con pocos datos | La recompensa debe definirse con cuidado | Auer et al. (2002); Russo et al. (2018) |
+| Recomendación educativa | Recursos acordes al perfil | Marco general de personalización | Enfoque amplio; requiere adaptarse a ítems de opción múltiple | Manouselis et al. (2011) |
+
+### 5.4 Brecha y posicionamiento de Adapta 11
+
+Ninguna de las cuatro soluciones consultadas documenta públicamente la regla con que selecciona preguntas ni explica al estudiante por qué le asigna cada una, y ninguna menciona una vista para docentes o colegios. Las soluciones que declaran adaptatividad la presentan como una característica comercial sin un mecanismo auditable. La brecha que Adapta 11 propone cubrir es, por tanto, la de una **selección de preguntas transparente, reproducible y explicable, con seguimiento por competencia y vistas para colegios**, evaluada de forma comparable frente a una línea base.
+
+Esa posición es una propuesta, no un logro. Hoy Adapta 11 aporta las vistas por rol, la taxonomía por competencia y eje, y el registro necesario; la transparencia de la selección adaptativa solo existirá cuando se implemente y se evalúe. Frente a las alternativas comerciales también hay desventajas verificables: un banco de 104 preguntas frente a las más de 10 000 que declara Sabero, sin calibración TRI y sin puntaje oficial.
 
 ## 6. Solución propuesta
 
