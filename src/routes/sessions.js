@@ -3,6 +3,7 @@ const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const { resumenEstudiante } = require('../lib/estadisticas');
+const dificultad = require('../lib/dificultad');
 
 const router = express.Router();
 
@@ -11,7 +12,7 @@ const router = express.Router();
 // servidor contra el banco de preguntas (no se confia en lo que mande el
 // navegador), para que las estadisticas del administrador sean confiables.
 router.post('/', requireAuth, asyncHandler(async (req, res) => {
-  const { tipo, materia, dificultad, competencia, eje, materias, tiempo_segundos, respuestas } = req.body || {};
+  const { tipo, materia, dificultad: dificultadBody, nivel_solicitado, competencia, eje, materias, tiempo_segundos, respuestas } = req.body || {};
   if (!['practica', 'simulacro'].includes(tipo)) {
     return res.status(400).json({ error: 'Tipo de sesion invalido.' });
   }
@@ -26,6 +27,9 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
   const todasLasPreguntas = ids.length ? await db.leer('questions') : [];
   const preguntas = db.dondeEn(todasLasPreguntas, 'id', ids);
   const porId = new Map(preguntas.map(p => [p.id, p]));
+  // Nivel historico de cada pregunta ANTES de sumar esta sesion (asi la
+  // retroalimentacion no se mide con las respuestas del propio estudiante).
+  const statsNivel = await dificultad.estadisticasPorPregunta();
 
   const respuestasNormalizadas = respuestas.map((r, idx) => {
     const q = porId.get(r.question_id);
@@ -38,7 +42,7 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
       question_id: r.question_id || null,
       orden: idx + 1,
       materia: q ? q.materia : (r.materia || materia || 'lectura_critica'),
-      dificultad: q ? q.dificultad : (r.dificultad || dificultad || 'media'),
+      dificultad: q ? q.dificultad : (r.dificultad || dificultadBody || 'media'),
       competencia: q ? q.competencia : null,
       eje: q ? q.eje : null,
       respuesta_usuario: respuestaUsuario,
@@ -47,7 +51,8 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
       // Datos de la pregunta para armar la retroalimentacion sin un segundo
       // round-trip; se toman siempre del banco (nunca de lo enviado por el
       // navegador), igual que la correccion.
-      _pregunta: q || null
+      _pregunta: q || null,
+      _nivel: dificultad.infoNivel(statsNivel.get(r.question_id))
     };
   });
 
@@ -67,7 +72,10 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
     user_id: req.user.id,
     tipo,
     materia: materia || null,
-    dificultad: dificultad || null,
+    // Nivel de dificultad que pidio el estudiante al iniciar la practica
+    // (facil | medio | dificil); null = aleatorio. Se guarda con el mismo
+    // vocabulario de la columna (facil/media/dificil).
+    dificultad: ({ facil: 'facil', medio: 'media', dificil: 'dificil' })[nivel_solicitado] || dificultadBody || null,
     competencia: competencia || null,
     eje: eje || null,
     materias: materiasTexto,
@@ -91,6 +99,8 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
     tiempo_segundos: a.tiempo_segundos
   }));
   const resultadoInsercion = await db.crearVarias('exam_answers', filas);
+  // Hay respuestas nuevas: el nivel historico de las preguntas puede cambiar.
+  dificultad.invalidar();
   if (resultadoInsercion.skipped.length) {
     // No pasa a diario: la sesion (con su nota final) ya quedo guardada; solo
     // se pierde el detalle de esas respuestas puntuales para la retro y las
@@ -115,6 +125,12 @@ function construirRetroalimentacion(respuestasNormalizadas) {
     orden: a.orden,
     materia: a.materia,
     dificultad: a.dificultad,
+    // Nivel historico de la pregunta (facil | medio | dificil | no_medido),
+    // su tasa de acierto (%) y cuantas veces se ha contestado. Ver
+    // lib/dificultad.js. `dificultad` (arriba) es la etiqueta manual del banco.
+    nivel: a._nivel ? a._nivel.nivel : 'no_medido',
+    tasa_acierto: a._nivel ? a._nivel.tasa_acierto : null,
+    veces_contestada: a._nivel ? a._nivel.veces_contestada : 0,
     competencia: a.competencia,
     eje: a.eje,
     correcta: !!a.correcta,
@@ -188,9 +204,10 @@ router.get('/:id', requireAuth, asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Sesion no encontrada.' });
   }
 
-  const [respuestas, todasLasPreguntas] = await Promise.all([
+  const [respuestas, todasLasPreguntas, statsNivel] = await Promise.all([
     db.leer('exam_answers', { session_id: sesion.id }),
-    db.leer('questions')
+    db.leer('questions'),
+    dificultad.estadisticasPorPregunta()
   ]);
   respuestas.sort((a, b) => a.orden - b.orden);
   const porId = new Map(todasLasPreguntas.map((q) => [q.id, q]));
@@ -198,7 +215,8 @@ router.get('/:id', requireAuth, asyncHandler(async (req, res) => {
   const respuestasNormalizadas = respuestas.map((r) => ({
     orden: r.orden, materia: r.materia, dificultad: r.dificultad, competencia: r.competencia, eje: r.eje,
     correcta: r.correcta, tiempo_segundos: r.tiempo_segundos, respuesta_usuario: r.respuesta_usuario,
-    _pregunta: porId.get(r.question_id) || null
+    _pregunta: porId.get(r.question_id) || null,
+    _nivel: dificultad.infoNivel(statsNivel.get(r.question_id))
   }));
 
   const detalle = construirRetroalimentacion(respuestasNormalizadas);

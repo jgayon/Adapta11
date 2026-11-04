@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { requireAdmin, requireAuth } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
+const dificultad = require('../lib/dificultad');
 
 const router = express.Router();
 
@@ -178,6 +179,13 @@ function barajarConservandoGrupos(preguntas) {
 // Icfes). Si no se indica competencia/eje, se toman preguntas de toda la
 // materia.
 //
+// Tambien se puede pedir un nivel de dificultad (?nivel=facil|medio|dificil|
+// aleatorio; por defecto aleatorio = sin filtrar). El nivel es el HISTORICO
+// de la pregunta (ver lib/dificultad.js), no la etiqueta manual `dificultad`.
+// Si no hay suficientes preguntas de ese nivel, se completan con preguntas
+// "no medidas" (sin historia suficiente) y se avisa en `aviso`; asi ademas
+// esas preguntas acumulan respuestas y terminan teniendo nivel.
+//
 // Roble no tiene "ORDER BY RANDOM() LIMIT n" ni filtra por booleanos de
 // forma confiable: se trae del banco todo lo que cumpla materia/competencia/
 // eje (filtros de texto, seguros), se filtra "activo" en JavaScript y de ahi
@@ -185,6 +193,7 @@ function barajarConservandoGrupos(preguntas) {
 router.get('/practice', requireAuth, asyncHandler(async (req, res) => {
   const { materia, competencia, eje } = req.query;
   const count = Math.min(Math.max(Number(req.query.count) || 5, 1), 20);
+  const nivel = dificultad.NIVELES_SELECCIONABLES.includes(req.query.nivel) ? req.query.nivel : 'aleatorio';
   if (!MATERIAS.includes(materia)) {
     return res.status(400).json({ error: 'Materia invalida.' });
   }
@@ -194,9 +203,30 @@ router.get('/practice', requireAuth, asyncHandler(async (req, res) => {
 
   const candidatas = await db.leer('questions', filtros);
   const activas = candidatas.filter((q) => q.activo === true);
-  const rows = barajar(activas).slice(0, count);
+
+  let rows;
+  let aviso = null;
+  if (nivel === 'aleatorio') {
+    rows = barajar(activas).slice(0, count);
+  } else {
+    const stats = await dificultad.estadisticasPorPregunta();
+    const nivelDe = (q) => {
+      const s = stats.get(q.id);
+      return dificultad.clasificar(s ? s.total : 0, s ? s.correctas : 0);
+    };
+    const delNivel = barajar(activas.filter((q) => nivelDe(q) === nivel));
+    rows = delNivel.slice(0, count);
+    if (rows.length < count) {
+      const sinMedir = barajar(activas.filter((q) => nivelDe(q) === 'no_medido'));
+      const extra = sinMedir.slice(0, count - rows.length);
+      rows = [...rows, ...extra];
+      const etiqueta = { facil: 'Facil', medio: 'Medio', dificil: 'Dificil' }[nivel];
+      aviso = 'Con esos filtros solo hay ' + delNivel.length + ' pregunta(s) de nivel ' + etiqueta + '.' +
+        (extra.length ? ' Se completo con ' + extra.length + ' pregunta(s) cuyo nivel todavia no esta medido.' : '');
+    }
+  }
   const { preguntas, textos } = await completarGrupos(rows);
-  res.json({ preguntas, textos });
+  res.json({ preguntas, textos, nivel, aviso });
 }));
 
 // Conjunto de preguntas para el Simulacro. "materias" indica si el estudiante
@@ -236,9 +266,10 @@ router.get('/', requireAdmin, asyncHandler(async (req, res) => {
     filtros.eje = eje;
   }
 
-  const [candidatas, textos] = await Promise.all([
+  const [candidatas, textos, stats] = await Promise.all([
     db.leer('questions', filtros),
-    db.leer('textos')
+    db.leer('textos'),
+    dificultad.estadisticasPorPregunta()
   ]);
   const textosPorId = new Map(textos.map((t) => [t.id, t]));
   const rows = candidatas
@@ -246,6 +277,7 @@ router.get('/', requireAdmin, asyncHandler(async (req, res) => {
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
     .map((q) => ({
       ...q,
+      ...dificultad.infoNivel(stats.get(q.id)),
       texto_contenido: q.texto_id ? (textosPorId.get(q.texto_id) || {}).contenido : null,
       texto_imagen: q.texto_id ? (textosPorId.get(q.texto_id) || {}).imagen || null : null
     }));
@@ -338,9 +370,11 @@ router.get('/:id', requireAdmin, asyncHandler(async (req, res) => {
   const pregunta = await db.porId('questions', req.params.id);
   if (!pregunta) return res.status(404).json({ error: 'Pregunta no encontrada.' });
   const texto = pregunta.texto_id ? await db.porId('textos', pregunta.texto_id) : null;
+  const stats = await dificultad.estadisticasPorPregunta();
   res.json({
     pregunta: {
       ...pregunta,
+      ...dificultad.infoNivel(stats.get(pregunta.id)),
       texto_contenido: texto ? texto.contenido : null,
       texto_imagen: texto ? texto.imagen || null : null
     }

@@ -113,6 +113,19 @@
   function competenciaLabel(c) { return COMPETENCIA_LABEL[c] || c || '-'; }
   function ejeLabel(j) { return EJE_LABEL[j] || j || '-'; }
 
+  // Nivel de dificultad HISTORICO de una pregunta (lo calcula el servidor con
+  // lo que han respondido los estudiantes: aciertos / veces contestada).
+  const NIVEL_LABEL = { facil: 'Fácil', medio: 'Medio', dificil: 'Difícil', no_medido: 'No medido' };
+  function nivelPill(nivel, tasa, veces) {
+    const n = NIVEL_LABEL[nivel] ? nivel : 'no_medido';
+    const detalle = (veces || 0) === 0
+      ? 'Nadie la ha contestado todavía.'
+      : (n === 'no_medido'
+        ? 'Aún hay pocas respuestas (' + veces + ') para medir su nivel.'
+        : tasa + ' % de aciertos en ' + veces + ' respuestas.');
+    return `<span class="pill pill-nivel-${n}" title="${detalle}">${NIVEL_LABEL[n]}</span>`;
+  }
+
   // Una pregunta se muestra en formato "texto a la izquierda / pregunta a la
   // derecha" siempre que tenga una lectura (corta o larga) o una imagen: el
   // texto queda fijo de un lado y lo unico que cambia al pasar de pregunta
@@ -941,6 +954,7 @@
         <td><span class="pill pill-materia">${materiaLabel(p.materia)}</span></td>
         <td><span class="pill pill-competencia">${competenciaLabel(p.competencia)}</span></td>
         <td><span class="pill pill-eje">${ejeLabel(p.eje)}</span></td>
+        <td style="white-space:nowrap;">${nivelPill(p.nivel, p.tasa_acierto, p.veces_contestada)}${p.veces_contestada ? `<div class="hint mb-0">${p.tasa_acierto}% &middot; ${p.veces_contestada} resp.</div>` : ''}</td>
         <td style="white-space:normal; max-width:320px;">${escapeHtml(p.enunciado).slice(0, 110)}${p.enunciado.length > 110 ? '&hellip;' : ''}</td>
         <td>${p.imagen ? '&#128247;' : ''}${p.texto_id ? ` <span class="pill pill-eje" title="Texto compartido #${p.texto_id}">Texto #${p.texto_id}</span>` : ''}</td>
         <td>
@@ -985,7 +999,7 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Materia</th><th>Competencia</th><th>Eje</th><th>Enunciado</th><th>Imagen</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>ID</th><th>Materia</th><th>Competencia</th><th>Eje</th><th>Nivel</th><th>Enunciado</th><th>Imagen</th><th>Acciones</th></tr></thead>
             <tbody>${filas || ''}</tbody>
           </table>
           ${!a.preguntas.length ? '<div class="empty-state">No hay preguntas con estos filtros todavia.</div>' : ''}
@@ -1069,6 +1083,8 @@
             <span class="pill pill-materia">${materiaLabel(p.materia)}</span>
             <span class="pill pill-competencia">${competenciaLabel(p.competencia)}</span>
             <span class="pill pill-eje">${ejeLabel(p.eje)}</span>
+            ${nivelPill(p.nivel, p.tasa_acierto, p.veces_contestada)}
+            ${p.veces_contestada ? `<span class="hint">${p.tasa_acierto}% de aciertos en ${p.veces_contestada} respuestas</span>` : ''}
           </div>
           ${bloqueFuente ? `
             <div class="question-box ${dividido ? 'question-box-split' : ''}">
@@ -2135,6 +2151,16 @@
             <select name="eje" id="input-p-eje"></select>
           </div>
           <div class="field">
+            <label>Nivel de dificultad</label>
+            <select name="nivel">
+              <option value="aleatorio" selected>Aleatorio (todos los niveles)</option>
+              <option value="facil">Fácil</option>
+              <option value="medio">Medio</option>
+              <option value="dificil">Difícil</option>
+            </select>
+            <p class="hint mb-0">El nivel sale de cuántos estudiantes aciertan cada pregunta. Las preguntas que aún no tienen suficientes respuestas aparecen como &quot;No medido&quot;.</p>
+          </div>
+          <div class="field">
             <label>Cantidad de preguntas</label>
             <select name="count">
               <option value="5">5</option>
@@ -2160,16 +2186,18 @@
       ev.preventDefault();
       const fd = new FormData(ev.target);
       const materia = fd.get('materia'), competencia = fd.get('competencia'), eje = fd.get('eje'), count = fd.get('count');
-      const params = new URLSearchParams({ materia, count });
+      const nivel = fd.get('nivel') || 'aleatorio';
+      const params = new URLSearchParams({ materia, count, nivel });
       if (competencia) params.set('competencia', competencia);
       if (eje) params.set('eje', eje);
       const data = await api(`/questions/practice?${params.toString()}`);
       if (!data.preguntas.length) {
-        alert('Todavia no hay preguntas cargadas para esa combinacion. Elige otra competencia o eje.');
+        alert('Todavia no hay preguntas cargadas para esa combinacion. Elige otra competencia, eje o nivel.');
         return;
       }
+      if (data.aviso) alert(data.aviso);
       state.estudiante.practica = {
-        materia, competencia, eje,
+        materia, competencia, eje, nivel,
         preguntas: data.preguntas,
         textosMap: new Map((data.textos || []).map(t => [t.id, { contenido: t.contenido, imagen: t.imagen || null }])),
         idx: 0,
@@ -2278,7 +2306,7 @@
     }));
     const data = await api('/sessions', {
       method: 'POST',
-      body: { tipo: 'practica', materia: pr.materia, competencia: pr.competencia, eje: pr.eje, tiempo_segundos: pr.tiempo, respuestas }
+      body: { tipo: 'practica', materia: pr.materia, competencia: pr.competencia, eje: pr.eje, nivel_solicitado: pr.nivel, tiempo_segundos: pr.tiempo, respuestas }
     });
     state.estudiante.resultado = data.sesion;
     state.estudiante.resultadoDetalle = data.detalle;
@@ -2529,7 +2557,10 @@
             <div class="revision-pregunta ${p.correcta ? 'correcta' : 'incorrecta'}">
               <div class="row between" style="gap:0.5rem; flex-wrap:wrap;">
                 <strong>Pregunta ${i + 1}${p.competencia ? ' &middot; ' + competenciaLabel(p.competencia) : ''}${p.eje ? ' &middot; ' + ejeLabel(p.eje) : ''}</strong>
-                <span class="pill ${p.correcta ? 'pill-correcta' : 'pill-incorrecta'}">${p.correcta ? 'Correcta' : 'Incorrecta'}</span>
+                <span class="row" style="gap:0.4rem;">
+                  <span class="hint mb-0">Nivel:</span>${nivelPill(p.nivel, p.tasa_acierto, p.veces_contestada)}
+                  <span class="pill ${p.correcta ? 'pill-correcta' : 'pill-incorrecta'}">${p.correcta ? 'Correcta' : 'Incorrecta'}</span>
+                </span>
               </div>
               ${p.enunciado ? `<p style="margin:0.5rem 0;">${escapeHtml(p.enunciado)}</p>` : ''}
               ${p.opciones ? `
