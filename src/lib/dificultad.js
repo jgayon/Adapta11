@@ -43,8 +43,8 @@ function clasificar(total, correctas) {
 
 let cache = { hasta: 0, promesa: null };
 
-async function calcular() {
-  const respuestas = await db.leer('exam_answers');
+// Cuenta aciertos por pregunta a partir de las filas de exam_answers.
+function contar(respuestas) {
   const mapa = new Map();
   for (const r of respuestas) {
     if (!r.question_id || !r.respuesta_usuario) continue;
@@ -56,15 +56,21 @@ async function calcular() {
   return mapa;
 }
 
-// Map(question_id -> { total, correctas }). Comparte la misma lectura entre
-// peticiones simultaneas y la reutiliza durante CACHE_MS.
-function estadisticasPorPregunta() {
+// Todas las filas de exam_answers. Comparte la misma lectura entre peticiones
+// simultaneas y la reutiliza durante CACHE_MS (la usan tambien el selector
+// adaptativo y las estadisticas por pregunta). NO modificar las filas.
+function respuestasTodas() {
   const ahora = Date.now();
   if (cache.promesa && ahora < cache.hasta) return cache.promesa;
-  const promesa = calcular();
+  const promesa = db.leer('exam_answers');
   cache = { hasta: ahora + CACHE_MS, promesa };
   promesa.catch(() => { if (cache.promesa === promesa) cache = { hasta: 0, promesa: null }; });
   return promesa;
+}
+
+// Map(question_id -> { total, correctas }).
+async function estadisticasPorPregunta() {
+  return contar(await respuestasTodas());
 }
 
 // Descarta el calculo guardado (se llama al guardar una sesion nueva).
@@ -85,5 +91,5 @@ function infoNivel(stat) {
 
 module.exports = {
   NIVELES, NIVELES_SELECCIONABLES, MIN_RESPUESTAS, UMBRAL_FACIL, UMBRAL_DIFICIL,
-  clasificar, estadisticasPorPregunta, invalidar, infoNivel
+  clasificar, respuestasTodas, estadisticasPorPregunta, invalidar, infoNivel
 };

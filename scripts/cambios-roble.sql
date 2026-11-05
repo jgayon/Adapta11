@@ -43,3 +43,10 @@ CREATE TABLE refresh_tokens (
 -- 4) Imagen opcional para un texto compartido (la lectura/grafico que usan
 --    varias preguntas juntas), igual que la imagen de una pregunta suelta.
 ALTER TABLE textos ADD COLUMN imagen TEXT;
+
+-- 5) OPCIONAL: guardar la estrategia de seleccion de cada sesion y el motivo
+--    de cada pregunta (practica adaptativa), para poder comparar estrategias.
+--    Correr estas dos lineas UNA vez en la Consola SQL ANTES de poner
+--    GUARDAR_ESTRATEGIA=1 en el .env del servidor.
+ALTER TABLE exam_sessions ADD COLUMN estrategia TEXT;
+ALTER TABLE exam_answers ADD COLUMN motivo_seleccion TEXT;

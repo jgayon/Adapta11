@@ -2143,6 +2143,15 @@
             </select>
           </div>
           <div class="field">
+            <label>¿Cómo quieres practicar?</label>
+            <select name="modo" id="input-p-modo">
+              <option value="adaptativo" selected>Adaptativa (el sistema elige por ti)</option>
+              <option value="dirigida">Elegir yo: competencia, eje y nivel</option>
+            </select>
+            <p class="hint mb-0" id="hint-p-modo">El sistema usa tu historial: refuerza las competencias donde más fallas, explora las que casi no has practicado y repasa las que dominas. Cada pregunta te explica por qué se eligió.</p>
+          </div>
+          <div id="bloque-manual" class="stack" style="display:none;">
+          <div class="field">
             <label>Competencia (opcional)</label>
             <select name="competencia" id="input-p-competencia"></select>
           </div>
@@ -2159,6 +2168,7 @@
               <option value="dificil">Difícil</option>
             </select>
             <p class="hint mb-0">El nivel sale de cuántos estudiantes aciertan cada pregunta. Las preguntas que aún no tienen suficientes respuestas aparecen como &quot;No medido&quot;.</p>
+          </div>
           </div>
           <div class="field">
             <label>Cantidad de preguntas</label>
@@ -2180,24 +2190,36 @@
     }
     poblarTaxonomiaPractica(materiaInicial);
     el('input-p-materia').onchange = (e) => poblarTaxonomiaPractica(e.target.value);
+    el('input-p-modo').onchange = (e) => {
+      const manual = e.target.value === 'dirigida';
+      el('bloque-manual').style.display = manual ? '' : 'none';
+      el('hint-p-modo').style.display = manual ? 'none' : '';
+    };
 
     el('volver').onclick = () => { state.estudiante.pantalla = 'inicio'; render(); };
     el('form-practica').onsubmit = async (ev) => {
       ev.preventDefault();
       const fd = new FormData(ev.target);
       const materia = fd.get('materia'), competencia = fd.get('competencia'), eje = fd.get('eje'), count = fd.get('count');
-      const nivel = fd.get('nivel') || 'aleatorio';
-      const params = new URLSearchParams({ materia, count, nivel });
-      if (competencia) params.set('competencia', competencia);
-      if (eje) params.set('eje', eje);
-      const data = await api(`/questions/practice?${params.toString()}`);
+      const modo = fd.get('modo') === 'dirigida' ? 'dirigida' : 'adaptativo';
+      const nivel = modo === 'dirigida' ? (fd.get('nivel') || 'aleatorio') : 'aleatorio';
+      const params = new URLSearchParams({ materia, count });
+      if (modo === 'dirigida') {
+        params.set('nivel', nivel);
+        if (competencia) params.set('competencia', competencia);
+        if (eje) params.set('eje', eje);
+      }
+      const data = await api(`/questions/${modo === 'adaptativo' ? 'adaptive' : 'practice'}?${params.toString()}`);
       if (!data.preguntas.length) {
         alert('Todavia no hay preguntas cargadas para esa combinacion. Elige otra competencia, eje o nivel.');
         return;
       }
       if (data.aviso) alert(data.aviso);
       state.estudiante.practica = {
-        materia, competencia, eje, nivel,
+        materia, modo,
+        competencia: modo === 'dirigida' ? competencia : '',
+        eje: modo === 'dirigida' ? eje : '',
+        nivel,
         preguntas: data.preguntas,
         textosMap: new Map((data.textos || []).map(t => [t.id, { contenido: t.contenido, imagen: t.imagen || null }])),
         idx: 0,
@@ -2269,6 +2291,7 @@
         <div>
           <div class="eyebrow">Practica &middot; ${materiaLabel(pr.materia)} &middot; ${competenciaLabel(q.competencia)} &middot; ${ejeLabel(q.eje)}</div>
           <h2 class="mb-0">Pregunta ${pr.idx + 1} de ${pr.preguntas.length}</h2>
+          ${q.motivo ? `<p class="hint mb-0" style="margin-top:0.3rem;"><strong>Por qué esta pregunta:</strong> ${escapeHtml(q.motivo)}</p>` : ''}
         </div>
         <div class="row" style="gap:0.6rem;">
           <span id="practica-timer" class="timer ${pr.pausado ? 'paused' : ''}">${formatTiempo(pr.tiempo)}</span>
@@ -2302,11 +2325,12 @@
     const pr = state.estudiante.practica;
     if (pr.intervalo) clearInterval(pr.intervalo);
     const respuestas = pr.preguntas.map((q, i) => ({
-      question_id: q.id, respuesta_usuario: pr.respuestas[i], tiempo_segundos: pr.tiempoPorPregunta[i] || 0
+      question_id: q.id, respuesta_usuario: pr.respuestas[i], tiempo_segundos: pr.tiempoPorPregunta[i] || 0,
+      motivo: q.motivo || null
     }));
     const data = await api('/sessions', {
       method: 'POST',
-      body: { tipo: 'practica', materia: pr.materia, competencia: pr.competencia, eje: pr.eje, nivel_solicitado: pr.nivel, tiempo_segundos: pr.tiempo, respuestas }
+      body: { tipo: 'practica', materia: pr.materia, competencia: pr.competencia, eje: pr.eje, nivel_solicitado: pr.nivel, modo: pr.modo, tiempo_segundos: pr.tiempo, respuestas }
     });
     state.estudiante.resultado = data.sesion;
     state.estudiante.resultadoDetalle = data.detalle;
@@ -2575,6 +2599,7 @@
                   `).join('')}
                 </div>
               ` : ''}
+              ${p.motivo ? `<p class="hint" style="margin-top:0.5rem;"><strong>Por qué se eligió:</strong> ${escapeHtml(p.motivo)}</p>` : ''}
               ${p.explicacion ? `<p class="hint" style="margin-top:0.5rem;"><strong>Explicacion:</strong> ${escapeHtml(p.explicacion)}</p>` : ''}
               <p class="hint mb-0" style="margin-top:0.4rem;">Tiempo en esta pregunta: ${formatTiempo(p.tiempo_segundos)}</p>
             </div>

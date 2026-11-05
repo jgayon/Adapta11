@@ -3,6 +3,7 @@ const db = require('../db');
 const { requireAdmin, requireAuth } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const dificultad = require('../lib/dificultad');
+const selector = require('../lib/selector');
 
 const router = express.Router();
 
@@ -227,6 +228,72 @@ router.get('/practice', requireAuth, asyncHandler(async (req, res) => {
   }
   const { preguntas, textos } = await completarGrupos(rows);
   res.json({ preguntas, textos, nivel, aviso });
+}));
+
+// Tanda ADAPTATIVA para el modo "Practica adaptativa": el sistema decide que
+// competencias reforzar, explorar o repasar y de que nivel de dificultad, a
+// partir del historial del estudiante (ver lib/selector.js, estrategia S1).
+// Cada pregunta trae `motivo`, el porque de su seleccion.
+router.get('/adaptive', requireAuth, asyncHandler(async (req, res) => {
+  const { materia } = req.query;
+  const count = Math.min(Math.max(Number(req.query.count) || 5, 1), 20);
+  if (!MATERIAS.includes(materia)) {
+    return res.status(400).json({ error: 'Materia invalida.' });
+  }
+
+  const [candidatas, sesiones, respuestas, stats] = await Promise.all([
+    db.leer('questions', { materia }),
+    db.leer('exam_sessions', { user_id: req.user.id }),
+    dificultad.respuestasTodas(),
+    dificultad.estadisticasPorPregunta()
+  ]);
+
+  // Historial del estudiante en esta materia: aciertos/respuestas por
+  // competencia, y la ultima vez que respondio cada pregunta. exam_answers no
+  // tiene user_id: se filtra por las sesiones del estudiante.
+  const fechaSesion = new Map(sesiones.map((s) => [s.id, String(s.fecha_fin || s.fecha_inicio || '')]));
+  const historial = {};
+  const respondidas = new Map();
+  for (const r of respuestas) {
+    if (!fechaSesion.has(r.session_id) || !r.respuesta_usuario) continue;
+    const acierto = r.correcta === true || r.correcta === 'true';
+    if (r.materia === materia && r.competencia) {
+      const h = historial[r.competencia] || (historial[r.competencia] = { n: 0, c: 0 });
+      h.n += 1;
+      if (acierto) h.c += 1;
+    }
+    if (r.question_id) {
+      const fecha = fechaSesion.get(r.session_id);
+      const previa = respondidas.get(r.question_id);
+      if (!previa || fecha >= previa.ultima) respondidas.set(r.question_id, { ultima: fecha, incorrecta: !acierto });
+    }
+  }
+
+  const nivelDe = (q) => {
+    const s = stats.get(q.id);
+    return dificultad.clasificar(s ? s.total : 0, s ? s.correctas : 0);
+  };
+  const { seleccion, unidades } = selector.seleccionar({
+    candidatas: candidatas.filter((q) => q.activo === true),
+    competencias: COMPETENCIAS_POR_MATERIA[materia],
+    historial, respondidas, nivelDe, count
+  });
+
+  const motivos = new Map(seleccion.map((s) => [s.pregunta.id, s.motivo]));
+  const { preguntas, textos } = await completarGrupos(seleccion.map((s) => s.pregunta));
+  const salida = preguntas.map((q) => ({
+    ...q,
+    motivo: motivos.get(q.id) || 'Acompaña al texto compartido de otra pregunta de esta práctica.'
+  }));
+  res.json({
+    preguntas: salida,
+    textos,
+    modo: 'adaptativo',
+    unidades: unidades.map((u) => ({
+      competencia: u.competencia, respuestas: u.n, aciertos: u.c, dominio: Math.round(u.p * 100), estado: u.estado
+    })),
+    aviso: salida.length < count ? 'Solo hay ' + salida.length + ' pregunta(s) disponible(s) en esta materia.' : null
+  });
 }));
 
 // Conjunto de preguntas para el Simulacro. "materias" indica si el estudiante

@@ -7,12 +7,19 @@ const dificultad = require('../lib/dificultad');
 
 const router = express.Router();
 
+// Si es '1', se guardan tambien la estrategia de seleccion de la sesion
+// (exam_sessions.estrategia) y el motivo de cada pregunta
+// (exam_answers.motivo_seleccion). Requiere correr antes, UNA vez, las dos
+// lineas ALTER TABLE del final de scripts/cambios-roble.sql en Roble; si las
+// columnas no existen, guardar la sesion fallaria.
+const GUARDAR_ESTRATEGIA = process.env.GUARDAR_ESTRATEGIA === '1';
+
 // Registra una sesion completa (practica o simulacro) ya finalizada, con
 // todas sus respuestas. La correccion de cada respuesta se recalcula en el
 // servidor contra el banco de preguntas (no se confia en lo que mande el
 // navegador), para que las estadisticas del administrador sean confiables.
 router.post('/', requireAuth, asyncHandler(async (req, res) => {
-  const { tipo, materia, dificultad: dificultadBody, nivel_solicitado, competencia, eje, materias, tiempo_segundos, respuestas } = req.body || {};
+  const { tipo, materia, dificultad: dificultadBody, nivel_solicitado, modo, competencia, eje, materias, tiempo_segundos, respuestas } = req.body || {};
   if (!['practica', 'simulacro'].includes(tipo)) {
     return res.status(400).json({ error: 'Tipo de sesion invalido.' });
   }
@@ -46,6 +53,9 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
       competencia: q ? q.competencia : null,
       eje: q ? q.eje : null,
       respuesta_usuario: respuestaUsuario,
+      // Motivo con el que el selector adaptativo eligio la pregunta (lo manda
+      // el navegador tal como lo recibio; solo informativo, no afecta la nota).
+      motivo: r.motivo ? String(r.motivo).slice(0, 300) : null,
       correcta,
       tiempo_segundos: tiempoPregunta,
       // Datos de la pregunta para armar la retroalimentacion sin un segundo
@@ -83,6 +93,7 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
     num_correctas: numCorrectas,
     tiempo_segundos: tiempo,
     nivel_estimado: nivelEstimado,
+    ...(GUARDAR_ESTRATEGIA ? { estrategia: modo === 'adaptativo' ? 'adaptativa_s1' : 'dirigida' } : {}),
     fecha_fin: new Date().toISOString()
   });
 
@@ -96,7 +107,8 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
     eje: a.eje,
     respuesta_usuario: a.respuesta_usuario,
     correcta: a.correcta,
-    tiempo_segundos: a.tiempo_segundos
+    tiempo_segundos: a.tiempo_segundos,
+    ...(GUARDAR_ESTRATEGIA ? { motivo_seleccion: a.motivo } : {})
   }));
   const resultadoInsercion = await db.crearVarias('exam_answers', filas);
   // Hay respuestas nuevas: el nivel historico de las preguntas puede cambiar.
@@ -128,6 +140,7 @@ function construirRetroalimentacion(respuestasNormalizadas) {
     // Nivel historico de la pregunta (facil | medio | dificil | no_medido),
     // su tasa de acierto (%) y cuantas veces se ha contestado. Ver
     // lib/dificultad.js. `dificultad` (arriba) es la etiqueta manual del banco.
+    motivo: a.motivo || null,
     nivel: a._nivel ? a._nivel.nivel : 'no_medido',
     tasa_acierto: a._nivel ? a._nivel.tasa_acierto : null,
     veces_contestada: a._nivel ? a._nivel.veces_contestada : 0,
@@ -215,6 +228,7 @@ router.get('/:id', requireAuth, asyncHandler(async (req, res) => {
   const respuestasNormalizadas = respuestas.map((r) => ({
     orden: r.orden, materia: r.materia, dificultad: r.dificultad, competencia: r.competencia, eje: r.eje,
     correcta: r.correcta, tiempo_segundos: r.tiempo_segundos, respuesta_usuario: r.respuesta_usuario,
+    motivo: r.motivo_seleccion || null,
     _pregunta: porId.get(r.question_id) || null,
     _nivel: dificultad.infoNivel(statsNivel.get(r.question_id))
   }));
