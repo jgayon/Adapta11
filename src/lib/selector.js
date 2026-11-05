@@ -193,4 +193,5 @@ function seleccionar({ candidatas, competencias, historial, respondidas, nivelDe
 module.exports = {
   seleccionar, planificar, estadoUnidad, nivelObjetivo, repartirCupos,
   MIN_EVIDENCIA, UMBRAL_DEBIL, UMBRAL_FACIL, COMPETENCIA_LABEL
+
 };
