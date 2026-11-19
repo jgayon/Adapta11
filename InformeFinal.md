@@ -490,11 +490,79 @@ sequenceDiagram
 | Registro de estrategia y motivo | Parcial | Columnas `estrategia` y `motivo_seleccion` | Desactivado por defecto: requiere `ALTER TABLE` previo en Roble |
 
 ### 11.3 Integraciones
+
 ## 12. Despliegue y operación
+
 ## 13. Validación
+
 ### 13.1 Pruebas por componentes
+
 ### 13.2 Pruebas de integración
+
 ### 13.3 Pruebas de usabilidad
+
 ## 14. Resultados, discusión y conclusiones
+
 ## 15. Trabajo futuro
+
+**Evaluación con estudiantes reales.** Activar el registro de estrategia y motivo (`GUARDAR_ESTRATEGIA=1`), asignar estudiantes a práctica dirigida o adaptativa y medir el cambio de desempeño en sus competencias débiles. Este es el trabajo más importante pendiente, porque es el que permite afirmar o descartar el beneficio pedagógico.
+
+**Estrategias de selección.** Implementar la estrategia S2 (muestreo de Thompson) y compararla con S1 con las métricas del segundo informe. Estudiar un estimador de dominio tipo Elo (Pelánek, 2016) y la adaptación de los umbrales por estudiante. Añadir un respaldo automático a la selección dirigida si falla la lectura del historial.
+
+**Banco de preguntas.** Ampliar el banco, sobre todo en las competencias y ejes pequeños y en geometría; barajar el orden de las opciones al servir cada pregunta para neutralizar el sesgo de la letra correcta; calibrar la dificultad con más respuestas o con teoría de respuesta al ítem; y cubrir las otras áreas del Saber 11. Evaluar la generación asistida de preguntas con modelos de lenguaje, con validación pedagógica.
+
+**Rendimiento y escalabilidad.** Medir latencia, errores y concurrencia con 1, 5, 10 y 25 usuarios simultáneos; desnormalizar `user_id` en `exam_answers`, guardar contadores por pregunta para el nivel de dificultad, y reducir las lecturas de tablas completas; evaluar volver a una base de datos con consultas SQL si el volumen lo exige.
+
+**Calidad y seguridad.** Crear una batería de pruebas automatizadas con un script `test` (autenticación, roles, simulacro, estadísticas y administración) y pruebas de integración contra una instancia de Roble; limitar los intentos de inicio de sesión, agregar cabeceras de seguridad, eliminar los valores por defecto de los secretos y exigir contraseñas más largas; modularizar el frontend; y reescribir el `README.md` y la guía de despliegue.
+
+**Producto.** Extender la adaptación al simulacro, mostrar al estudiante un resumen visible de su dominio por competencia, y ofrecer a los docentes vistas por competencia de sus estudiantes.
+
 ## 16. Referencias
+
+Auer, P., Cesa-Bianchi, N., & Fischer, P. (2002). Finite-time analysis of the multiarmed bandit problem. *Machine Learning, 47*(2–3), 235–256.
+
+Brooke, J. (1996). SUS: A quick and dirty usability scale. En P. W. Jordan, B. Thomas, B. A. Weerdmeester, & I. L. McClelland (Eds.), *Usability evaluation in industry* (pp. 189–194). Taylor & Francis.
+
+Cepeda, N. J., Pashler, H., Vul, E., Wixted, J. T., & Rohrer, D. (2006). Distributed practice in verbal recall tasks: A review and quantitative synthesis. *Psychological Bulletin, 132*(3), 354–380.
+
+Corbett, A. T., & Anderson, J. R. (1995). Knowledge tracing: Modeling the acquisition of procedural knowledge. *User Modeling and User-Adapted Interaction, 4*(4), 253–278.
+
+Crocker, L., & Algina, J. (1986). *Introduction to classical and modern test theory*. Holt, Rinehart and Winston.
+
+El Universal. (19 de febrero de 2020). Icfes activa de forma permanente un simulacro para las pruebas Saber 11. https://www.eluniversal.com.co/colombia/2020/02/19/icfes-activa-de-forma-permanente-un-simulacro-para-las-pruebas-saber-11/
+
+Elo, A. E. (1978). *The rating of chessplayers, past and present*. Arco.
+
+Embretson, S. E., & Reise, S. P. (2000). *Item response theory for psychologists*. Lawrence Erlbaum.
+
+Enter.co. (s. f.). Oesaber, la app gratuita que ayuda a estudiantes a prepararse para las Pruebas Saber 11. https://www.enter.co/chips-bits/apps-software/oesaber-la-app-gratuita-que-ayuda-a-estudiantes-a-prepararse-para-las-pruebas-saber-11
+
+Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B., Vehtari, A., & Rubin, D. B. (2013). *Bayesian data analysis* (3.ª ed.). CRC Press.
+
+Instituto Colombiano para la Evaluación de la Educación [Icfes]. (2026). *Prueba Matemáticas, cuadernillo de preguntas. Saber 11.º*. Dirección de Evaluación, Icfes.
+
+Klinkenberg, S., Straatemeier, M., & van der Maas, H. L. J. (2011). Computer adaptive practice of maths ability using a new item response model for on the fly ability and difficulty estimation. *Computers & Education, 57*(2), 1813–1824.
+
+La República. (6 de julio de 2019). El Icfes habilitó herramienta de simulacro en línea para sus próximas pruebas Saber. https://www.larepublica.co/economia/el-icfes-habilito-herramienta-de-simulacro-en-linea-para-sus-proximas-pruebas-saber-2882118
+
+Lord, F. M. (1980). *Applications of item response theory to practical testing problems*. Lawrence Erlbaum.
+
+Manouselis, N., Drachsler, H., Vuorikari, R., Hummel, H., & Koper, R. (2011). Recommender systems in technology enhanced learning. En F. Ricci, L. Rokach, B. Shapira, & P. B. Kantor (Eds.), *Recommender systems handbook* (pp. 387–415). Springer.
+
+Pelánek, R. (2016). Applications of the Elo rating system in adaptive educational systems. *Computers & Education, 98*, 169–179. https://doi.org/10.1016/j.compedu.2016.03.017
+
+Pelánek, R., Papoušek, J., Řihák, J., Stanislav, V., & Nižnan, J. (2017). Elo-based learner modeling for the adaptive practice of facts. *User Modeling and User-Adapted Interaction, 27*(1), 89–118. https://doi.org/10.1007/s11257-016-9185-7
+
+Piech, C., Bassen, J., Huang, J., Ganguli, S., Sahami, M., Guibas, L. J., & Sohl-Dickstein, J. (2015). Deep knowledge tracing. *Advances in Neural Information Processing Systems, 28*, 505–513.
+
+Roediger, H. L., & Karpicke, J. D. (2006). Test-enhanced learning: Taking memory tests improves long-term retention. *Psychological Science, 17*(3), 249–255.
+
+Russo, D. J., Van Roy, B., Kazerouni, A., Osband, I., & Wen, Z. (2018). A tutorial on Thompson sampling. *Foundations and Trends in Machine Learning, 11*(1), 1–96.
+
+Sabero. (s. f.). *Sabero: la plataforma colombiana con preguntas tipo ICFES* [Ficha de producto]. Hunted. https://hunted.space/product/sabero
+
+Supertest Tech Inc. (2026). *Supertest* [Ficha de aplicación]. App Store, a través de mwm.ai. https://mwm.ai/apps/supertest/6761273273
+
+van der Linden, W. J., & Glas, C. A. W. (Eds.). (2000). *Computerized adaptive testing: Theory and practice*. Kluwer Academic Publishers.
+
+Wauters, K., Desmet, P., & Van den Noortgate, W. (2010). Adaptive item-based learning environments based on the item response theory: Possibilities and challenges. *Journal of Computer Assisted Learning, 26*(6), 549–562.
