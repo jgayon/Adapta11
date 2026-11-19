@@ -454,6 +454,75 @@ router.get('/taxonomia', requireAuth, asyncHandler(async (req, res) => {
   res.json({ competencias: COMPETENCIAS_POR_MATERIA, ejes: EJES_POR_MATERIA });
 }));
 
+// Dashboard de estadisticas del BANCO (no del desempeno de estudiantes, ver
+// GET /admin/resumen para eso): por materia, por competencia, las preguntas
+// mas falladas y cuantas quedan pendientes de validar (respaldo IA). Todo
+// se calcula en memoria sobre lo que ya trae dificultad.estadisticasPorPregunta().
+const MIN_RESPUESTAS_PARA_RANKING = 5; // igual que dificultad.MIN_RESPUESTAS, pero local para no acoplar
+router.get('/estadisticas', requireAdmin, asyncHandler(async (req, res) => {
+  const [todas, stats] = await Promise.all([
+    db.leer('questions'),
+    dificultad.estadisticasPorPregunta()
+  ]);
+  const activas = todas.filter((q) => q.activo === true);
+
+  const porMateria = {};
+  for (const materia of MATERIAS) {
+    const deEstaMateria = activas.filter((q) => q.materia === materia);
+    porMateria[materia] = {
+      total: deEstaMateria.length,
+      con_imagen: deEstaMateria.filter((q) => q.imagen).length,
+      con_texto: deEstaMateria.filter((q) => q.texto_id).length,
+      pendientes_validar: deEstaMateria.filter((q) => q.origen === 'ia' && q.validada !== true).length
+    };
+  }
+
+  const porCompetencia = [];
+  for (const materia of MATERIAS) {
+    for (const competencia of COMPETENCIAS_POR_MATERIA[materia]) {
+      const deEstaCompetencia = activas.filter((q) => q.materia === materia && q.competencia === competencia);
+      const conHistoria = deEstaCompetencia
+        .map((q) => stats.get(q.id))
+        .filter((s) => s && s.total >= MIN_RESPUESTAS_PARA_RANKING);
+      const promedio = conHistoria.length
+        ? Math.round(conHistoria.reduce((acc, s) => acc + (s.correctas / s.total), 0) / conHistoria.length * 100)
+        : null;
+      porCompetencia.push({
+        materia, competencia,
+        total: deEstaCompetencia.length,
+        medidas: conHistoria.length,
+        promedio_acierto: promedio
+      });
+    }
+  }
+
+  // Las que mas le cuestan a los estudiantes: menor tasa de acierto, solo
+  // entre las que ya tienen suficientes respuestas para que el dato
+  // signifique algo (ver MIN_RESPUESTAS_PARA_RANKING).
+  const masFalladas = activas
+    .map((q) => ({ q, s: stats.get(q.id) }))
+    .filter(({ s }) => s && s.total >= MIN_RESPUESTAS_PARA_RANKING)
+    .sort((a, b) => (a.s.correctas / a.s.total) - (b.s.correctas / b.s.total))
+    .slice(0, 8)
+    .map(({ q, s }) => ({
+      id: q.id,
+      materia: q.materia,
+      competencia: q.competencia,
+      eje: q.eje,
+      enunciado: q.enunciado,
+      tasa_acierto: Math.round((s.correctas / s.total) * 100),
+      veces_contestada: s.total
+    }));
+
+  res.json({
+    por_materia: porMateria,
+    por_competencia: porCompetencia,
+    mas_falladas: masFalladas,
+    pendientes_validar_total: activas.filter((q) => q.origen === 'ia' && q.validada !== true).length,
+    uso_generador: generador.estadoUso()
+  });
+}));
+
 // Textos compartidos (lecturas usadas por varias preguntas). Van antes de
 // /:id para que "/textos" no se interprete como un id de pregunta.
 router.get('/textos', requireAdmin, asyncHandler(async (req, res) => {

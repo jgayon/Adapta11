@@ -38,8 +38,38 @@ const EJE_LABEL = {
 const NIVEL_LABEL = { facil: 'facil', medio: 'medio', dificil: 'dificil' };
 const LETRAS = ['a', 'b', 'c', 'd'];
 
+// Tope diario de preguntas generadas (para controlar el gasto de la API).
+// 0 o vacio = sin tope. Se reinicia solo (en memoria, no en Roble): si el
+// servidor se reinicia, el contador vuelve a cero antes de lo esperado;
+// aceptable para un proyecto de curso, documentado aqui a proposito.
+const TOPE_DIARIO = Math.max(0, Number(process.env.GENERADOR_TOPE_DIARIO) || 50);
+let usoDiario = { dia: '', generadas: 0 };
+
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function usoDelDia() {
+  if (usoDiario.dia !== hoyISO()) usoDiario = { dia: hoyISO(), generadas: 0 };
+  return usoDiario;
+}
+
+function registrarUso(n) {
+  const u = usoDelDia();
+  u.generadas += n;
+}
+
+// Para el dashboard de admin: cuantas se han generado hoy y cual es el tope
+// configurado (0 = sin tope).
+function estadoUso() {
+  const u = usoDelDia();
+  return { generadas_hoy: u.generadas, tope_diario: TOPE_DIARIO };
+}
+
 function disponible() {
-  return !!process.env.ANTHROPIC_API_KEY;
+  if (!process.env.ANTHROPIC_API_KEY) return false;
+  if (TOPE_DIARIO > 0 && usoDelDia().generadas >= TOPE_DIARIO) return false;
+  return true;
 }
 
 // Normaliza texto para comparar duplicados: minusculas, sin tildes, sin
@@ -182,7 +212,8 @@ async function generarPreguntas({ materia, competencia, eje, nivel, cantidad, ev
     resultado.push({ ...valido, materia, competencia, eje });
     if (resultado.length >= pedir) break;
   }
+  if (resultado.length) registrarUso(resultado.length);
   return resultado;
 }
 
-module.exports = { disponible, generarPreguntas, normalizarTexto, sonParecidos, validarItem, extraerJSON };
+module.exports = { disponible, generarPreguntas, estadoUso, normalizarTexto, sonParecidos, validarItem, extraerJSON };

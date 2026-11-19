@@ -32,6 +32,9 @@
       filtroMateria: '',
       filtroCompetencia: '',
       filtroEje: '',
+      filtroPendientes: false,
+      estadisticas: null, // ver loadAdminEstadisticas()
+      seleccionadas: new Set(), // ids marcados con checkbox en la tabla del banco (acciones en bloque)
       modal: null, // { modo: 'crear'|'editar'|'ver', pregunta }
       modalError: '',
       estudiantes: [],
@@ -415,6 +418,7 @@
       state.admin.tab = 'resumen';
       loadAdminResumen();
       loadAdminPreguntas();
+      loadAdminEstadisticas();
       loadAdminEstudiantes();
     } else if (state.user.role === 'profesor') {
       state.view = 'profesor';
@@ -715,6 +719,23 @@
     render();
   }
 
+  // Dashboard agregado del BANCO (distinto del desempeno de estudiantes de
+  // loadAdminResumen): por materia/competencia, las mas falladas, cuantas
+  // preguntas de respaldo IA quedan pendientes de validar y cuanto se ha
+  // usado el generador hoy (ver GET /questions/estadisticas).
+  async function loadAdminEstadisticas() {
+    const data = await api('/questions/estadisticas');
+    state.admin.estadisticas = data;
+    render();
+  }
+
+  // Vuelve a pedir la tabla del banco Y el dashboard: usar despues de
+  // aprobar/eliminar preguntas (una o en bloque), que cambian ambos.
+  function refrescarBanco() {
+    loadAdminPreguntas();
+    loadAdminEstadisticas();
+  }
+
   async function loadAdminEstudiantes() {
     const data = await api('/admin/students');
     state.admin.estudiantes = data.estudiantes;
@@ -957,10 +978,79 @@
 
   /* ---------- Admin: banco de preguntas ---------- */
 
+  // Tarjeta de estadisticas agregadas del banco (ver GET /questions/estadisticas):
+  // por materia, promedio de aciertos por competencia, las mas falladas y
+  // cuanto se ha usado hoy el generador de respaldo.
+  function tarjetaEstadisticasBanco() {
+    const e = state.admin.estadisticas;
+    if (!e) return '';
+    const filaMateria = (m) => `
+      <tr>
+        <td>${materiaLabel(m)}</td>
+        <td>${e.por_materia[m].total}</td>
+        <td>${e.por_materia[m].con_imagen}</td>
+        <td>${e.por_materia[m].con_texto}</td>
+        <td>${e.por_materia[m].pendientes_validar || '-'}</td>
+      </tr>`;
+    const filasCompetencia = e.por_competencia.map(c => `
+      <tr>
+        <td><span class="pill pill-materia">${materiaLabel(c.materia)}</span> ${competenciaLabel(c.competencia)}</td>
+        <td>${c.total}</td>
+        <td>${c.medidas}</td>
+        <td>${c.promedio_acierto !== null ? c.promedio_acierto + '%' : '<span class="hint mb-0">sin datos</span>'}</td>
+      </tr>`).join('');
+    const filasFalladas = e.mas_falladas.map(p => `
+      <tr>
+        <td>#${p.id}</td>
+        <td><span class="pill pill-competencia">${competenciaLabel(p.competencia)}</span></td>
+        <td style="white-space:normal; max-width:280px;">${escapeHtml(p.enunciado).slice(0, 90)}${p.enunciado.length > 90 ? '&hellip;' : ''}</td>
+        <td>${p.tasa_acierto}%</td>
+        <td>${p.veces_contestada}</td>
+      </tr>`).join('');
+    const uso = e.uso_generador;
+    const usoTxt = uso.tope_diario > 0 ? `${uso.generadas_hoy} / ${uso.tope_diario} hoy` : `${uso.generadas_hoy} hoy (sin tope)`;
+
+    return `
+      <div class="card" style="margin-bottom:1rem;">
+        <h3>Estadisticas del banco</h3>
+        <div class="row" style="gap:1.5rem; flex-wrap:wrap; align-items:flex-start;">
+          <div style="min-width:280px;">
+            <p class="hint mb-0" style="margin-bottom:0.4rem;">Por materia</p>
+            <table>
+              <thead><tr><th>Materia</th><th>Activas</th><th>Con imagen</th><th>Con texto</th><th>Pend. validar</th></tr></thead>
+              <tbody>${MATERIAS.map(filaMateria).join('')}</tbody>
+            </table>
+          </div>
+          <div style="min-width:320px; flex:1;">
+            <p class="hint mb-0" style="margin-bottom:0.4rem;">Promedio de aciertos por competencia (preguntas con al menos 5 respuestas)</p>
+            <table>
+              <thead><tr><th>Competencia</th><th>Total</th><th>Medidas</th><th>Promedio</th></tr></thead>
+              <tbody>${filasCompetencia}</tbody>
+            </table>
+          </div>
+        </div>
+        ${e.mas_falladas.length ? `
+          <div style="margin-top:1rem;">
+            <p class="hint mb-0" style="margin-bottom:0.4rem;">Las que mas le cuestan a los estudiantes</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>ID</th><th>Competencia</th><th>Enunciado</th><th>% aciertos</th><th>Respuestas</th></tr></thead>
+                <tbody>${filasFalladas}</tbody>
+              </table>
+            </div>
+          </div>
+        ` : ''}
+        <p class="hint mb-0" style="margin-top:1rem;">Generador de respaldo: ${usoTxt}${e.pendientes_validar_total ? ` &middot; <strong>${e.pendientes_validar_total}</strong> pregunta(s) esperando validacion` : ''}.</p>
+      </div>
+    `;
+  }
+
   function renderAdminPreguntas() {
     const a = state.admin;
+    const mostrarCheckbox = a.filtroPendientes;
     const filas = a.preguntas.map(p => `
       <tr>
+        ${mostrarCheckbox ? `<td><input type="checkbox" data-sel="${p.id}" ${a.seleccionadas.has(p.id) ? 'checked' : ''} /></td>` : ''}
         <td>#${p.id}</td>
         <td><span class="pill pill-materia">${materiaLabel(p.materia)}</span></td>
         <td><span class="pill pill-competencia">${competenciaLabel(p.competencia)}</span></td>
@@ -987,6 +1077,7 @@
       : '';
 
     el('admin-content').innerHTML = `
+      ${tarjetaEstadisticasBanco()}
       <div class="card">
         <div class="row between" style="margin-bottom:1rem; flex-wrap:wrap;">
           <div class="row" style="gap:0.6rem; flex-wrap:wrap;">
@@ -1013,9 +1104,19 @@
             <button id="btn-nueva-pregunta" class="btn btn-primary">+ Agregar pregunta</button>
           </div>
         </div>
+        ${mostrarCheckbox && a.preguntas.length ? `
+          <div class="row" style="gap:0.6rem; margin-bottom:0.75rem; align-items:center;">
+            <label class="row" style="gap:0.35rem; align-items:center; font-size:0.9rem;">
+              <input type="checkbox" id="sel-todas" ${a.preguntas.length && a.preguntas.every(p => a.seleccionadas.has(p.id)) ? 'checked' : ''} />
+              Seleccionar todas (${a.preguntas.length})
+            </label>
+            <button id="btn-aprobar-lote" class="btn btn-primary btn-sm" ${a.seleccionadas.size ? '' : 'disabled'}>Aprobar seleccionadas (${a.seleccionadas.size})</button>
+            <button id="btn-eliminar-lote" class="btn btn-danger btn-sm" ${a.seleccionadas.size ? '' : 'disabled'}>Eliminar seleccionadas (${a.seleccionadas.size})</button>
+          </div>
+        ` : ''}
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Materia</th><th>Competencia</th><th>Eje</th><th>Nivel</th><th>Enunciado</th><th>Imagen</th><th>Acciones</th></tr></thead>
+            <thead><tr>${mostrarCheckbox ? '<th></th>' : ''}<th>ID</th><th>Materia</th><th>Competencia</th><th>Eje</th><th>Nivel</th><th>Enunciado</th><th>Imagen</th><th>Acciones</th></tr></thead>
             <tbody>${filas || ''}</tbody>
           </table>
           ${!a.preguntas.length ? '<div class="empty-state">No hay preguntas con estos filtros todavia.</div>' : ''}
@@ -1028,7 +1129,9 @@
     };
     el('filtro-competencia').onchange = (e) => { a.filtroCompetencia = e.target.value; loadAdminPreguntas(); };
     el('filtro-eje').onchange = (e) => { a.filtroEje = e.target.value; loadAdminPreguntas(); };
-    el('filtro-pendientes').onchange = (e) => { a.filtroPendientes = e.target.checked; loadAdminPreguntas(); };
+    el('filtro-pendientes').onchange = (e) => {
+      a.filtroPendientes = e.target.checked; a.seleccionadas = new Set(); loadAdminPreguntas();
+    };
     el('btn-nueva-pregunta').onclick = () => { a.modal = { modo: 'crear', pregunta: null }; a.modalError = ''; render(); };
     el('btn-nuevo-texto').onclick = () => renderModalTextoMultiple();
 
@@ -1051,7 +1154,8 @@
       btn.onclick = async () => {
         if (!confirm('Esta pregunta se quitara del banco activo. ¿Continuar?')) return;
         await api('/questions/' + btn.dataset.eliminar, { method: 'DELETE' });
-        loadAdminPreguntas();
+        a.seleccionadas.delete(btn.dataset.eliminar);
+        refrescarBanco();
       };
     });
     app().querySelectorAll('[data-aprobar]').forEach(btn => {
@@ -1059,13 +1163,58 @@
         btn.disabled = true;
         try {
           await api('/questions/' + btn.dataset.aprobar + '/validar', { method: 'PUT' });
-          loadAdminPreguntas();
+          a.seleccionadas.delete(btn.dataset.aprobar);
+          refrescarBanco();
         } catch (err) {
           alert('No se pudo aprobar la pregunta: ' + err.message);
           btn.disabled = false;
         }
       };
     });
+
+    if (mostrarCheckbox) {
+      app().querySelectorAll('[data-sel]').forEach(chk => {
+        chk.onchange = () => {
+          if (chk.checked) a.seleccionadas.add(chk.dataset.sel); else a.seleccionadas.delete(chk.dataset.sel);
+          render();
+        };
+      });
+      const selTodas = el('sel-todas');
+      if (selTodas) {
+        selTodas.onchange = (e) => {
+          if (e.target.checked) a.preguntas.forEach(p => a.seleccionadas.add(p.id));
+          else a.preguntas.forEach(p => a.seleccionadas.delete(p.id));
+          render();
+        };
+      }
+      const btnAprobarLote = el('btn-aprobar-lote');
+      if (btnAprobarLote) {
+        btnAprobarLote.onclick = async () => {
+          const ids = [...a.seleccionadas];
+          btnAprobarLote.disabled = true;
+          btnAprobarLote.textContent = 'Aprobando...';
+          const resultados = await Promise.allSettled(ids.map(id => api('/questions/' + id + '/validar', { method: 'PUT' })));
+          const fallidas = resultados.filter(r => r.status === 'rejected').length;
+          a.seleccionadas = new Set();
+          refrescarBanco();
+          if (fallidas) alert(fallidas + ' de ' + ids.length + ' no se pudieron aprobar. Revisa el banco e intenta de nuevo con esas.');
+        };
+      }
+      const btnEliminarLote = el('btn-eliminar-lote');
+      if (btnEliminarLote) {
+        btnEliminarLote.onclick = async () => {
+          const ids = [...a.seleccionadas];
+          if (!confirm(ids.length + ' pregunta(s) se quitaran del banco activo. ¿Continuar?')) return;
+          btnEliminarLote.disabled = true;
+          btnEliminarLote.textContent = 'Eliminando...';
+          const resultados = await Promise.allSettled(ids.map(id => api('/questions/' + id, { method: 'DELETE' })));
+          const fallidas = resultados.filter(r => r.status === 'rejected').length;
+          a.seleccionadas = new Set();
+          refrescarBanco();
+          if (fallidas) alert(fallidas + ' de ' + ids.length + ' no se pudieron eliminar. Revisa el banco e intenta de nuevo con esas.');
+        };
+      }
+    }
   }
 
   function renderModalPregunta() {
