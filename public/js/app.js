@@ -126,6 +126,16 @@
     return `<span class="pill pill-nivel-${n}" title="${detalle}">${NIVEL_LABEL[n]}</span>`;
   }
 
+  // Pregunta de respaldo generada automaticamente (lib/generador.js, server),
+  // pendiente de que un administrador la revise y la apruebe (ver boton
+  // "Aprobar" en la tabla del banco y PUT /questions/:id/validar).
+  function origenPill(p) {
+    if (p.origen !== 'ia') return '';
+    return p.validada
+      ? '<span class="pill pill-nivel-facil" title="Pregunta generada por IA, ya revisada y aprobada por un administrador.">IA &middot; validada</span>'
+      : '<span class="pill pill-nivel-dificil" title="Pregunta generada automaticamente como respaldo porque el banco no alcanzaba. Un administrador todavia no la ha revisado.">IA &middot; sin validar</span>';
+  }
+
   // Una pregunta se muestra en formato "texto a la izquierda / pregunta a la
   // derecha" siempre que tenga una lectura (corta o larga) o una imagen: el
   // texto queda fijo de un lado y lo unico que cambia al pasar de pregunta
@@ -699,6 +709,7 @@
     if (state.admin.filtroMateria) params.set('materia', state.admin.filtroMateria);
     if (state.admin.filtroCompetencia) params.set('competencia', state.admin.filtroCompetencia);
     if (state.admin.filtroEje) params.set('eje', state.admin.filtroEje);
+    if (state.admin.filtroPendientes) params.set('pendientes', '1');
     const data = await api('/questions?' + params.toString());
     state.admin.preguntas = data.preguntas;
     render();
@@ -954,13 +965,14 @@
         <td><span class="pill pill-materia">${materiaLabel(p.materia)}</span></td>
         <td><span class="pill pill-competencia">${competenciaLabel(p.competencia)}</span></td>
         <td><span class="pill pill-eje">${ejeLabel(p.eje)}</span></td>
-        <td style="white-space:nowrap;">${nivelPill(p.nivel, p.tasa_acierto, p.veces_contestada)}${p.veces_contestada ? `<div class="hint mb-0">${p.tasa_acierto}% &middot; ${p.veces_contestada} resp.</div>` : ''}</td>
+        <td style="white-space:nowrap;">${nivelPill(p.nivel, p.tasa_acierto, p.veces_contestada)}${p.veces_contestada ? `<div class="hint mb-0">${p.tasa_acierto}% &middot; ${p.veces_contestada} resp.</div>` : ''}${origenPill(p) ? `<div class="mb-0" style="margin-top:0.25rem;">${origenPill(p)}</div>` : ''}</td>
         <td style="white-space:normal; max-width:320px;">${escapeHtml(p.enunciado).slice(0, 110)}${p.enunciado.length > 110 ? '&hellip;' : ''}</td>
         <td>${p.imagen ? '&#128247;' : ''}${p.texto_id ? ` <span class="pill pill-eje" title="Texto compartido #${p.texto_id}">Texto #${p.texto_id}</span>` : ''}</td>
         <td>
-          <div class="row" style="gap:0.4rem;">
+          <div class="row" style="gap:0.4rem; flex-wrap:wrap;">
             <button class="btn btn-outline btn-sm" data-ver="${p.id}">Ver</button>
             <button class="btn btn-outline btn-sm" data-editar="${p.id}">Editar</button>
+            ${p.origen === 'ia' && !p.validada ? `<button class="btn btn-primary btn-sm" data-aprobar="${p.id}">Aprobar</button>` : ''}
             <button class="btn btn-danger btn-sm" data-eliminar="${p.id}">Eliminar</button>
           </div>
         </td>
@@ -991,6 +1003,10 @@
               <option value="">Todo eje</option>
               ${opcionesEje}
             </select>
+            <label class="row" style="gap:0.35rem; align-items:center; font-size:0.9rem;">
+              <input type="checkbox" id="filtro-pendientes" ${a.filtroPendientes ? 'checked' : ''} />
+              Solo respaldo IA sin validar
+            </label>
           </div>
           <div class="row" style="gap:0.5rem;">
             <button id="btn-nuevo-texto" class="btn btn-secondary">+ Crear texto con varias preguntas</button>
@@ -1012,6 +1028,7 @@
     };
     el('filtro-competencia').onchange = (e) => { a.filtroCompetencia = e.target.value; loadAdminPreguntas(); };
     el('filtro-eje').onchange = (e) => { a.filtroEje = e.target.value; loadAdminPreguntas(); };
+    el('filtro-pendientes').onchange = (e) => { a.filtroPendientes = e.target.checked; loadAdminPreguntas(); };
     el('btn-nueva-pregunta').onclick = () => { a.modal = { modo: 'crear', pregunta: null }; a.modalError = ''; render(); };
     el('btn-nuevo-texto').onclick = () => renderModalTextoMultiple();
 
@@ -1035,6 +1052,18 @@
         if (!confirm('Esta pregunta se quitara del banco activo. ¿Continuar?')) return;
         await api('/questions/' + btn.dataset.eliminar, { method: 'DELETE' });
         loadAdminPreguntas();
+      };
+    });
+    app().querySelectorAll('[data-aprobar]').forEach(btn => {
+      btn.onclick = async () => {
+        btn.disabled = true;
+        try {
+          await api('/questions/' + btn.dataset.aprobar + '/validar', { method: 'PUT' });
+          loadAdminPreguntas();
+        } catch (err) {
+          alert('No se pudo aprobar la pregunta: ' + err.message);
+          btn.disabled = false;
+        }
       };
     });
   }
@@ -2581,8 +2610,9 @@
             <div class="revision-pregunta ${p.correcta ? 'correcta' : 'incorrecta'}">
               <div class="row between" style="gap:0.5rem; flex-wrap:wrap;">
                 <strong>Pregunta ${i + 1}${p.competencia ? ' &middot; ' + competenciaLabel(p.competencia) : ''}${p.eje ? ' &middot; ' + ejeLabel(p.eje) : ''}</strong>
-                <span class="row" style="gap:0.4rem;">
+                <span class="row" style="gap:0.4rem; flex-wrap:wrap;">
                   <span class="hint mb-0">Nivel:</span>${nivelPill(p.nivel, p.tasa_acierto, p.veces_contestada)}
+                  ${p.pendiente_validacion ? '<span class="pill pill-nivel-dificil" title="Esta pregunta se genero automaticamente como respaldo porque el banco no alcanzaba; un administrador todavia no la ha revisado.">Respaldo IA &middot; sin validar</span>' : ''}
                   <span class="pill ${p.correcta ? 'pill-correcta' : 'pill-incorrecta'}">${p.correcta ? 'Correcta' : 'Incorrecta'}</span>
                 </span>
               </div>

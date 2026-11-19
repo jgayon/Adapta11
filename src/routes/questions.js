@@ -4,6 +4,7 @@ const { requireAdmin, requireAuth } = require('../middleware/auth');
 const asyncHandler = require('../lib/asyncHandler');
 const dificultad = require('../lib/dificultad');
 const selector = require('../lib/selector');
+const generador = require('../lib/generador');
 
 const router = express.Router();
 
@@ -226,6 +227,50 @@ router.get('/practice', requireAuth, asyncHandler(async (req, res) => {
         (extra.length ? ' Se completo con ' + extra.length + ' pregunta(s) cuyo nivel todavia no esta medido.' : '');
     }
   }
+  // Si al banco le faltan preguntas para esta combinacion (incluso despues
+  // del relleno con "no medidas" de arriba), se generan de respaldo con IA
+  // para que la practica no se quede corta ni le repita siempre las mismas
+  // preguntas al estudiante. Quedan marcadas `origen: 'ia'` y
+  // `validada: false` hasta que un administrador las revise (ver
+  // PUT /:id/validar); mientras tanto se le muestran igual, como respaldo
+  // no oficial (ver lib/generador.js). Si la API no esta configurada o
+  // falla, generador.generarPreguntas devuelve [] y la practica sigue
+  // exactamente como antes.
+  if (rows.length < count && generador.disponible()) {
+    // Todo este bloque va en try/catch a proposito: si Roble todavia no
+    // tiene las columnas `origen`/`validada` (falta correr la migracion de
+    // scripts/cambios-roble.sql) o la insercion falla por cualquier otra
+    // razon, la practica debe seguir funcionando igual que si el generador
+    // no existiera, nunca con un error 500 por culpa de este relleno.
+    try {
+      const competenciaGen = COMPETENCIAS_POR_MATERIA[materia].includes(competencia)
+        ? competencia
+        : barajar(COMPETENCIAS_POR_MATERIA[materia])[0];
+      const ejeGen = EJES_POR_MATERIA[materia].includes(eje) ? eje : barajar(EJES_POR_MATERIA[materia])[0];
+      const nivelGen = nivel !== 'aleatorio' ? nivel : undefined;
+      const evitar = activas.filter((q) => q.competencia === competenciaGen).map((q) => q.enunciado);
+      const generadas = await generador.generarPreguntas({
+        materia, competencia: competenciaGen, eje: ejeGen, nivel: nivelGen,
+        cantidad: count - rows.length, evitar
+      });
+      if (generadas.length) {
+        const filas = generadas.map((g) => ({
+          ...g,
+          dificultad: ({ facil: 'facil', medio: 'media', dificil: 'dificil' })[nivelGen] || 'media',
+          texto_base: null, texto_id: null, imagen: null,
+          opcion_a_imagen: null, opcion_b_imagen: null, opcion_c_imagen: null, opcion_d_imagen: null,
+          activo: true, origen: 'ia', validada: false
+        }));
+        const ins = await db.crearVarias('questions', filas);
+        rows = [...rows, ...ins.inserted];
+        aviso = (aviso ? aviso + ' ' : '') +
+          'Se generaron ' + ins.inserted.length + ' pregunta(s) nueva(s) de respaldo (no oficiales, pendientes de validacion) para completar la practica.';
+      }
+    } catch (err) {
+      console.error('No se pudo generar/guardar preguntas de respaldo (revisa que la migracion de origen/validada ya se corrio en Roble):', err.message);
+    }
+  }
+
   const { preguntas, textos } = await completarGrupos(rows);
   res.json({ preguntas, textos, nivel, aviso });
 }));
@@ -279,8 +324,52 @@ router.get('/adaptive', requireAuth, asyncHandler(async (req, res) => {
     historial, respondidas, nivelDe, count
   });
 
-  const motivos = new Map(seleccion.map((s) => [s.pregunta.id, s.motivo]));
-  const { preguntas, textos } = await completarGrupos(seleccion.map((s) => s.pregunta));
+  // Si el selector no alcanzo a completar la tanda (banco agotado incluso
+  // despues de pedir "complemento" de otra competencia, ver lib/selector.js),
+  // se generan de respaldo con IA para la competencia mas necesitada segun
+  // el propio historial del estudiante (debil > sin_evidencia > dominada).
+  // Mismo criterio que en /practice: quedan `origen: 'ia'`, `validada: false`,
+  // y se le muestran igual al estudiante como respaldo no oficial.
+  let seleccionFinal = seleccion;
+  if (seleccionFinal.length < count && generador.disponible()) {
+    // Mismo motivo que en /practice: si Roble todavia no tiene las columnas
+    // origen/validada o la insercion falla, la practica adaptativa sigue
+    // con lo que el selector ya encontro, nunca con un error 500.
+    try {
+      const prioridad = { debil: 0, sin_evidencia: 1, dominada: 2 };
+      const unidadObjetivo = unidades.slice().sort((a, b) => (prioridad[a.estado] - prioridad[b.estado]) || (a.p - b.p))[0];
+      if (unidadObjetivo) {
+        const ejeGen = barajar(EJES_POR_MATERIA[materia])[0];
+        const nivelGen = selector.nivelObjetivo(unidadObjetivo);
+        const evitar = candidatas.filter((q) => q.competencia === unidadObjetivo.competencia).map((q) => q.enunciado);
+        const generadas = await generador.generarPreguntas({
+          materia, competencia: unidadObjetivo.competencia, eje: ejeGen, nivel: nivelGen,
+          cantidad: count - seleccionFinal.length, evitar
+        });
+        if (generadas.length) {
+          const filas = generadas.map((g) => ({
+            ...g,
+            dificultad: ({ facil: 'facil', medio: 'media', dificil: 'dificil' })[nivelGen] || 'media',
+            texto_base: null, texto_id: null, imagen: null,
+            opcion_a_imagen: null, opcion_b_imagen: null, opcion_c_imagen: null, opcion_d_imagen: null,
+            activo: true, origen: 'ia', validada: false
+          }));
+          const ins = await db.crearVarias('questions', filas);
+          const etiquetaComp = selector.COMPETENCIA_LABEL[unidadObjetivo.competencia] || unidadObjetivo.competencia;
+          seleccionFinal = seleccionFinal.concat(ins.inserted.map((q) => ({
+            pregunta: q,
+            razon: 'respaldo_ia',
+            motivo: 'Generada automaticamente como respaldo: el banco no tenia mas preguntas de ' + etiquetaComp + ' disponibles. Pendiente de validacion por un administrador.'
+          })));
+        }
+      }
+    } catch (err) {
+      console.error('No se pudo generar/guardar preguntas de respaldo en /adaptive (revisa que la migracion de origen/validada ya se corrio en Roble):', err.message);
+    }
+  }
+
+  const motivos = new Map(seleccionFinal.map((s) => [s.pregunta.id, s.motivo]));
+  const { preguntas, textos } = await completarGrupos(seleccionFinal.map((s) => s.pregunta));
   const salida = preguntas.map((q) => ({
     ...q,
     motivo: motivos.get(q.id) || 'Acompaña al texto compartido de otra pregunta de esta práctica.'
@@ -312,7 +401,12 @@ router.get('/simulacro-pool', requireAuth, asyncHandler(async (req, res) => {
     const porNivel = Math.max(1, Math.round(porMateria / 3));
     for (const dificultad of DIFICULTADES) {
       const candidatas = await db.leer('questions', { materia, dificultad });
-      const activas = candidatas.filter((q) => q.activo === true);
+      // El Simulacro es de alto impacto (calcula el nivel estimado): nunca
+      // incluye preguntas de respaldo generadas por IA que aun no haya
+      // validado un administrador (ver lib/generador.js). `validada` no
+      // existe en las preguntas normales del banco, por eso se compara
+      // contra `false` explicito y no contra `true`.
+      const activas = candidatas.filter((q) => q.activo === true && q.validada !== false);
       preguntas.push(...barajar(activas).slice(0, porNivel));
     }
   }
@@ -323,7 +417,7 @@ router.get('/simulacro-pool', requireAuth, asyncHandler(async (req, res) => {
 /* ---------- Rutas de administrador ---------- */
 
 router.get('/', requireAdmin, asyncHandler(async (req, res) => {
-  const { materia, competencia, eje } = req.query;
+  const { materia, competencia, eje, pendientes } = req.query;
   const filtros = {};
   if (MATERIAS.includes(materia)) filtros.materia = materia;
   if (materia && COMPETENCIAS_POR_MATERIA[materia] && COMPETENCIAS_POR_MATERIA[materia].includes(competencia)) {
@@ -341,6 +435,9 @@ router.get('/', requireAdmin, asyncHandler(async (req, res) => {
   const textosPorId = new Map(textos.map((t) => [t.id, t]));
   const rows = candidatas
     .filter((q) => q.activo === true)
+    // "pendientes=1": solo preguntas generadas por IA que un administrador
+    // todavia no ha validado (ver lib/generador.js y PUT /:id/validar).
+    .filter((q) => pendientes !== '1' || (q.origen === 'ia' && q.validada !== true))
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
     .map((q) => ({
       ...q,
@@ -480,6 +577,17 @@ router.put('/:id', requireAdmin, asyncHandler(async (req, res) => {
   }
 
   const pregunta = await db.actualizar('questions', req.params.id, normalizado);
+  res.json({ pregunta });
+}));
+
+// Aprueba una pregunta de respaldo generada por IA (origen: 'ia'): la marca
+// como validada para que deje de aparecer en "pendientes de validar" en el
+// panel de admin. No cambia el contenido; para corregirlo se usa PUT /:id
+// normal (de ahi en adelante se edita igual que cualquier otra pregunta).
+router.put('/:id/validar', requireAdmin, asyncHandler(async (req, res) => {
+  const existente = await db.porId('questions', req.params.id);
+  if (!existente) return res.status(404).json({ error: 'Pregunta no encontrada.' });
+  const pregunta = await db.actualizar('questions', req.params.id, { validada: true });
   res.json({ pregunta });
 }));
 

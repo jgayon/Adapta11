@@ -163,7 +163,12 @@ function construirRetroalimentacion(respuestasNormalizadas) {
       d: a._pregunta.opcion_d_imagen || null
     } : null,
     respuesta_correcta: a._pregunta ? a._pregunta.respuesta_correcta : null,
-    explicacion: a._pregunta ? a._pregunta.explicacion : null
+    explicacion: a._pregunta ? a._pregunta.explicacion : null,
+    // true si esta pregunta la genero automaticamente lib/generador.js como
+    // respaldo (banco insuficiente) y un administrador todavia no la ha
+    // validado (ver PUT /questions/:id/validar). Solo informativo para el
+    // estudiante/revision; no afecta la nota ni la correccion.
+    pendiente_validacion: a._pregunta ? (a._pregunta.origen === 'ia' && a._pregunta.validada !== true) : false
   }));
 
   const agrupar = (campo) => {

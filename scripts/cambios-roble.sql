@@ -50,3 +50,14 @@ ALTER TABLE textos ADD COLUMN imagen TEXT;
 --    GUARDAR_ESTRATEGIA=1 en el .env del servidor.
 ALTER TABLE exam_sessions ADD COLUMN estrategia TEXT;
 ALTER TABLE exam_answers ADD COLUMN motivo_seleccion TEXT;
+
+-- 6) OPCIONAL: generador de preguntas de respaldo con la API de Claude (ver
+--    src/lib/generador.js). Cuando al banco le faltan preguntas para una
+--    combinacion materia/competencia/eje/nivel, el servidor genera
+--    preguntas nuevas y las guarda aqui marcadas como no oficiales hasta
+--    que un administrador las valide desde el panel. Correr estas dos
+--    lineas UNA vez en la Consola SQL de Roble ANTES de poner
+--    ANTHROPIC_API_KEY en el .env del servidor (si no se corre esto, el
+--    generador simplemente no se activa: no rompe nada, solo no genera).
+ALTER TABLE questions ADD COLUMN origen TEXT;
+ALTER TABLE questions ADD COLUMN validada BOOLEAN;
