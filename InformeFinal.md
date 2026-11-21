@@ -508,6 +508,105 @@ Adapta 11 se conecta con tres servicios externos. El navegador nunca habla direc
 
 ## 12. Despliegue y operación
 
+## 12.1. Entorno de despliegue
+
+Adapta 11 se encuentra desplegada como una aplicación web accesible a través de internet, utilizando **Render** como plataforma de alojamiento del servidor y **Roble** (OpenLab de la Universidad del Norte) como servicio de persistencia de datos. Esta arquitectura permite que los usuarios accedan a la plataforma mediante un navegador web, sin necesidad de instalar el software localmente, y que la información relacionada con sus cuentas y actividades de aprendizaje se almacene de forma centralizada.
+
+El servicio de alojamiento ejecuta el backend desarrollado con Node.js y Express, mientras que los archivos del frontend son servidos desde el mismo servidor. La base de datos Roble es consumida mediante solicitudes HTTP desde el backend, evitando la exposición directa de las credenciales de acceso al cliente.
+
+La aplicación se encuentra disponible en la siguiente dirección:
+
+**URL de acceso:** <https://adapta11.onrender.com/>
+
+La configuración del despliegue se encuentra definida en el archivo `render.yaml`, el cual permite especificar las características del servicio, los comandos de instalación y ejecución, las variables de entorno y la ruta de verificación de disponibilidad.
+
+## 12.2. Configuración del servicio
+
+El servicio web se configura en Render utilizando el entorno de ejecución Node.js, con un plan gratuito y la región de Oregon. Para la instalación de dependencias se utiliza el comando `npm install && npm run seed`, mientras que el inicio de la aplicación se realiza mediante `npm start`.
+
+El proyecto requiere Node.js versión 18 o superior. Las dependencias y los comandos de ejecución se encuentran definidos en el archivo `package.json`.
+
+| Parámetro | Configuración |
+|---|---|
+| Plataforma de alojamiento | Render |
+| Tipo de servicio | Web Service |
+| Runtime | Node.js |
+| Versión requerida | Node.js ≥ 18 |
+| Región | Oregon |
+| Plan | Free |
+| Comando de construcción | `npm install && npm run seed` |
+| Comando de ejecución | `npm start` |
+| Ruta de verificación | `/healthz` |
+| URL de la aplicación | <https://adapta11.onrender.com/> |
+
+El comando de construcción instala las dependencias necesarias y ejecuta el proceso de inicialización del proyecto. El comando de ejecución inicia el servidor definido en `src/server.js`, encargado de servir la interfaz web y atender las solicitudes a la API.
+
+## 12.3. Configuración de variables de entorno
+
+Para el funcionamiento de la aplicación se utilizan variables de entorno que permiten configurar los servicios externos y los parámetros de seguridad sin incorporarlos directamente al código fuente.
+
+Entre las principales variables se encuentran las relacionadas con la autenticación, la conexión a Roble y el servicio de envío de correos electrónicos.
+
+| Variable | Función |
+|---|---|
+| `NODE_ENV` | Define el entorno de ejecución de la aplicación. |
+| `JWT_SECRET` | Permite firmar y verificar los tokens de autenticación. |
+| `ADMIN_EMAIL` | Define el correo de la cuenta administradora. |
+| `ADMIN_PASSWORD` | Establece la contraseña inicial del administrador. |
+| `ROBLE_BASE_URL` | Define la dirección de la API de Roble. |
+| `ROBLE_CONTRACT_ID` | Identifica el contrato o proyecto de base de datos utilizado. |
+| `ROBLE_SERVICE_EMAIL` | Correo de la cuenta de servicio utilizada para acceder a Roble. |
+| `ROBLE_SERVICE_PASSWORD` | Contraseña de la cuenta de servicio de Roble. |
+| `APP_URL` | Define la dirección pública de la aplicación. |
+| `GMAIL_USER` | Identifica la cuenta de correo utilizada en la configuración del envío de mensajes. |
+| `BREVO_API_KEY` | Permite la autenticación con el servicio de envío de correos Brevo. |
+
+Las variables que contienen credenciales se configuran directamente en el entorno del servicio de alojamiento. De esta manera, se evita que los datos sensibles queden expuestos en el repositorio público.
+
+## 12.4. Arquitectura del despliegue
+
+El despliegue de Adapta 11 se organiza en tres componentes principales: el navegador del usuario, el servidor de aplicación alojado en Render y la base de datos Roble. Adicionalmente, se integra Brevo para el envío de correos de confirmación asociados al registro de profesores.
+
+El navegador solicita los recursos de la aplicación y se comunica con el backend mediante la API. El servidor procesa las solicitudes, valida la autenticación y los permisos, ejecuta la lógica correspondiente y consulta o modifica la información almacenada en Roble. Cuando se requiere enviar un correo de confirmación, el servidor realiza la solicitud al servicio externo Brevo.
+
+**Figura 12.** Diagrama de despliegue de Adapta 11.
+
+```mermaid
+flowchart TD
+    U["Usuarios<br/>Estudiante, Profesor y Administrador"]
+    B["Navegador web<br/>Frontend HTML, CSS y JavaScript"]
+    R["Render<br/>Node.js + Express<br/>API y archivos estáticos"]
+    D[("Roble<br/>OpenLab Uninorte<br/>Persistencia de datos")]
+    M["Brevo<br/>Servicio de correo"]
+
+    U --> B
+    B <-->|HTTPS / JSON| R
+    R <-->|API REST / HTTPS| D
+    R -->|API HTTP| M
+```
+
+El servidor de aplicación constituye el punto central de comunicación entre los usuarios y los servicios externos. Esta distribución permite mantener la lógica de negocio y las operaciones de acceso a datos en el backend, mientras que el frontend se encarga de presentar la información y permitir la interacción con las funcionalidades del sistema.
+
+## 12.5. Operación y mantenimiento
+
+La operación de Adapta 11 se realiza a través del servicio web desplegado, al cual los usuarios acceden mediante la URL pública. El servidor gestiona las solicitudes de autenticación, consulta del banco de preguntas, generación de prácticas, ejecución de simulacros, almacenamiento de sesiones y consulta de estadísticas.
+
+La persistencia de la información se realiza en Roble, por lo que los datos de los estudiantes y sus resultados no dependen del almacenamiento local del navegador ni de los archivos temporales del servidor de alojamiento.
+
+Las tareas de mantenimiento contempladas incluyen la actualización del código fuente desde el repositorio, la revisión de las dependencias, la supervisión del funcionamiento del servicio, la verificación de la conexión con la base de datos y la gestión de las variables de entorno.
+
+La aplicación dispone de una ruta de verificación de salud (`/healthz`), configurada para que la plataforma de alojamiento pueda comprobar el estado del servicio. Esta permite realizar una verificación básica de disponibilidad del servidor.
+
+El mantenimiento del banco de preguntas también constituye una tarea operativa importante, debido a que la calidad y distribución del contenido influyen directamente en la selección dirigida y adaptativa. Por ello, se contempla la revisión de las preguntas, su clasificación por competencia y eje temático, así como la actualización de los contenidos cuando sea necesario.
+
+## 12.6. Consideraciones del despliegue
+
+El despliegue facilita el acceso a la plataforma desde diferentes dispositivos con conexión a internet y centraliza el almacenamiento de los datos. Sin embargo, su funcionamiento depende de la disponibilidad de Render, Roble y los servicios externos utilizados.
+
+Adicionalmente, al utilizar un plan gratuito de alojamiento, pueden presentarse limitaciones relacionadas con los recursos disponibles y los tiempos de respuesta del servicio. El rendimiento de la aplicación ante diferentes niveles de concurrencia no ha sido medido formalmente, por lo que se considera un aspecto pendiente de evaluación.
+
+En consecuencia, el despliegue actual corresponde a un entorno funcional para la operación y demostración del prototipo, pero no constituye una certificación de disponibilidad, escalabilidad o rendimiento para un uso masivo.
+
 ## 13. Validación
 
 ### 13.1 Pruebas por componentes
