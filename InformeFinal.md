@@ -85,8 +85,6 @@ Adicionalmente, los docentes y colegios cuentan con poca visibilidad sobre el de
 
 **Incluye.** Una aplicación web para tres roles: estudiantes (registro, práctica dirigida y adaptativa, simulacros, retroalimentación y progreso), profesores (consulta de los estudiantes de su colegio, creados por el administrador y confirmados por correo) y administradores (gestión del banco, textos compartidos, colegios y profesores, y vistas agregadas). Incluye un banco de 104 preguntas, el nivel de dificultad histórico de cada pregunta, la práctica adaptativa con motivo visible, y el despliegue en Render con Roble como base de datos.
 
-**No incluye.** La generación automática de preguntas con modelos de lenguaje y su validación; las otras tres áreas del Saber 11; un puntaje equivalente al oficial del Icfes; la calibración de ítems con teoría de respuesta al ítem; y una versión móvil nativa. Tampoco incluye la comparación con estudiantes reales de la efectividad pedagógica de la adaptación.
-
 ## 4. Objetivos
 
 **Objetivo general.** Diseñar e implementar un prototipo de sistema de seguimiento adaptativo para la preparación del Saber 11, que seleccione dinámicamente preguntas de un banco estructurado para Matemáticas y Lectura Crítica, de acuerdo con el área de interés y el desempeño de cada estudiante.
