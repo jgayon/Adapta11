@@ -745,8 +745,6 @@ La evaluación con usuarios reales queda planteada como una actividad pendiente 
 
 ## 14. Resultados, discusión y conclusiones
 
-# 14. Resultados, discusión y conclusiones
-
 ## 14.1. Resultados obtenidos
 
 Como resultado del proceso de desarrollo se obtuvo Adapta 11, una aplicación web funcional orientada a apoyar la preparación de los estudiantes para las pruebas Saber 11 en las áreas de Lectura Crítica y Matemáticas.
