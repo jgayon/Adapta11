@@ -490,6 +490,21 @@ sequenceDiagram
 | Registro de estrategia y motivo | Parcial | Columnas `estrategia` y `motivo_seleccion` | Desactivado por defecto: requiere `ALTER TABLE` previo en Roble |
 
 ### 11.3 Integraciones
+### 11.3 Integraciones
+
+Adapta 11 se conecta con tres servicios externos. El navegador nunca habla directamente con ninguno: todas las conexiones salen del servidor Express.
+
+| Servicio | Para qué se usa | Cómo se integra | Estado |
+| --- | --- | --- | --- |
+| **Roble** (OpenLab de Uninorte) | Persistencia de las siete tablas: `users`, `colegios`, `textos`, `questions`, `exam_sessions`, `exam_answers` y `refresh_tokens` | API REST consumida con `fetch` nativo desde la capa `src/db.js`, que inicia sesión con una cuenta de servicio y expone operaciones CRUD | Implementado y en uso en producción |
+| **Brevo** | Envío del correo de confirmación de los profesores (RF-02) | API HTTP con `BREVO_API_KEY`; no se usa SMTP porque Render lo bloquea en el plan gratuito | Implementado; el envío depende de tener Brevo configurado |
+| **Render** | Hospedaje del servidor Node.js (véase la sección 12) | Despliegue desde GitHub con `render.yaml` | Implementado y en uso en producción |
+
+**Roble.** Es la integración más importante y la más condicionante. Solo permite leer con filtros de igualdad, sin `JOIN`, `IN`, agregaciones ni orden aleatorio, por lo que esas operaciones se hacen en JavaScript sobre los datos ya traídos (véase la sección 3.2). Sus identificadores son UUID de texto, no enteros. La capa `db.js` aísla esta dependencia: si se cambiara el almacén, bastaría con reimplementar sus funciones. Para reducir lecturas repetidas se usa un caché en memoria de 60 segundos sobre `exam_answers`.
+
+**Brevo.** Al crear una cuenta de profesor, el servidor genera un token con vigencia de 7 días y envía el enlace de confirmación. Si el envío falla, la cuenta queda creada y la respuesta devuelve `correoEnviado: false`, para que el administrador reenvíe la confirmación. El profesor no puede iniciar sesión hasta abrir el enlace.
+
+**Turso (descartada).** El proyecto usó antes SQLite/Turso. Hoy `@libsql/client` solo se conserva como dependencia del script de migración de datos hacia Roble.
 
 ## 12. Despliegue y operación
 
