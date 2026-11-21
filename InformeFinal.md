@@ -609,14 +609,226 @@ En consecuencia, el despliegue actual corresponde a un entorno funcional para la
 
 ## 13. Validación
 
-### 13.1 Pruebas por componentes
+La validación de Adapta 11 se realizó mediante pruebas automatizadas orientadas a verificar el funcionamiento de los principales componentes de la lógica de negocio, la integración entre el banco de preguntas y el generador asistido por inteligencia artificial, y el comportamiento del sistema de selección adaptativa.
 
+La estrategia de validación se organizó en tres niveles: pruebas por componentes, pruebas de integración y pruebas de usabilidad. Para las pruebas automatizadas se desarrollaron scripts propios en Node.js, utilizando el módulo `assert` para comprobar condiciones y resultados esperados. En varios de estos scripts se emplea una base de datos simulada en memoria, lo que permite evaluar la lógica sin modificar los datos reales de la aplicación.
+
+Es importante diferenciar las pruebas automatizadas sobre escenarios controlados de una evaluación con usuarios reales. Las primeras permiten verificar reglas y comportamientos del software, mientras que las segundas permiten analizar la facilidad de uso y la efectividad pedagógica de la plataforma.
+
+### 13.1 Pruebas por componentes
+Las pruebas por componentes se enfocaron en verificar individualmente los módulos responsables de calcular la dificultad histórica de las preguntas, seleccionar preguntas según el desempeño del estudiante, generar preguntas mediante inteligencia artificial y calcular estadísticas del banco.
+
+Se desarrollaron los siguientes scripts:
+
+### a) Pruebas del módulo de dificultad (`prueba-dificultad.js`)
+
+Este conjunto de pruebas verifica la clasificación de las preguntas según la proporción de respuestas correctas registradas en el historial. Se comprueban los umbrales establecidos para los niveles fácil, medio y difícil, así como el comportamiento de las preguntas que todavía no cuentan con suficientes respuestas para determinar su dificultad.
+
+Los casos contemplados incluyen:
+
+- Preguntas sin historial suficiente, clasificadas como `no_medido`.
+- Preguntas con una tasa de acierto igual o superior al 70 %, clasificadas como fáciles.
+- Preguntas con una tasa de acierto entre el 40 % y el 69 %, clasificadas como medias.
+- Preguntas con una tasa de acierto inferior al 40 %, clasificadas como difíciles.
+- Exclusión de respuestas en blanco del cálculo de dificultad.
+- Actualización del nivel histórico después de registrar una nueva sesión.
+
+También se verifica que las preguntas inactivas no sean incluidas en la práctica y que la información de dificultad se actualice después de guardar una sesión.
+
+### b) Pruebas del selector adaptativo (`prueba-selector.js`)
+
+Se verificó el comportamiento del algoritmo de selección adaptativa S1, encargado de distribuir las preguntas según el historial del estudiante y el dominio estimado en cada competencia.
+
+Los escenarios contemplados incluyen:
+
+- Inicio en frío, cuando el estudiante todavía no cuenta con historial de respuestas.
+- Distribución de preguntas entre las competencias evaluadas.
+- Refuerzo de las competencias con menor desempeño.
+- Repaso de competencias que presentan un dominio elevado.
+- Exploración de competencias con evidencia insuficiente.
+- Selección de preguntas según su nivel de dificultad.
+- Evitar la repetición de preguntas cuando existen alternativas disponibles.
+- Presentación de una justificación que explica por qué se seleccionó cada pregunta.
+
+En el escenario de inicio en frío se verifica la selección de cinco preguntas distribuidas entre las tres competencias de matemáticas. En el escenario con historial, el selector comprueba una distribución de seis preguntas para la competencia débil, tres para la competencia con evidencia insuficiente y una para la competencia dominada, cuando se solicitan diez preguntas.
+
+### c) Pruebas del generador de preguntas (`prueba-generador.js`)
+
+Este script verifica las funciones de validación y procesamiento de las preguntas generadas mediante inteligencia artificial.
+
+Se contemplan los siguientes casos:
+
+- Validación de la estructura de una pregunta.
+- Normalización de la letra correspondiente a la respuesta correcta.
+- Rechazo de enunciados demasiado cortos.
+- Detección de opciones de respuesta repetidas.
+- Rechazo de respuestas correctas que no corresponden a las opciones permitidas.
+- Detección de preguntas duplicadas o demasiado similares.
+- Extracción de información en formato JSON, incluso cuando viene dentro de bloques de código.
+- Comportamiento cuando no se encuentra configurada la clave de acceso al servicio de IA.
+- Manejo de errores HTTP provenientes del servicio externo.
+
+Estas pruebas permiten verificar que el generador no incorpore automáticamente preguntas con estructuras inválidas o contenidos demasiado similares a los existentes.
+
+### d) Pruebas de estadísticas del banco (`prueba-estadisticas-banco.js`)
+
+Se verificó el cálculo de estadísticas generales del banco de preguntas y su organización por materia y competencia.
+
+Los escenarios contemplados incluyen:
+
+- Conteo total de preguntas por materia.
+- Identificación de preguntas que contienen imágenes.
+- Identificación de preguntas asociadas a textos compartidos.
+- Conteo de preguntas generadas mediante IA que están pendientes de validación.
+- Cálculo del promedio de aciertos por competencia.
+- Identificación de las preguntas con mayor cantidad de respuestas incorrectas.
+- Aplicación del mínimo de respuestas necesarias para incluir una pregunta en los cálculos estadísticos.
+- Consulta del límite diario de generación de preguntas.
+
+Para comprobar estos comportamientos se utiliza un conjunto controlado de seis preguntas de matemáticas, con diferentes características e historiales de respuesta.
 ### 13.2 Pruebas de integración
 
+Las pruebas de integración se orientaron a verificar la interacción entre los módulos del banco de preguntas, el sistema de práctica, el generador de preguntas mediante inteligencia artificial y los mecanismos administrativos de validación.
+
+Para ello se desarrolló el script `prueba-generador-integracion.js`, que utiliza una base de datos simulada y una respuesta controlada del servicio externo de generación de preguntas.
+
+El escenario principal consiste en solicitar una práctica de cuatro preguntas cuando el banco únicamente dispone de una pregunta activa que cumple los filtros establecidos. En este caso, el sistema debe completar la cantidad solicitada mediante la generación de tres preguntas adicionales.
+
+Los casos de integración contemplados son:
+
+### a) Generación de preguntas de respaldo
+
+Se verifica que, cuando el banco no dispone de suficientes preguntas para completar una práctica, el sistema pueda solicitar preguntas adicionales al generador y completar la cantidad requerida.
+
+Las preguntas generadas se identifican mediante el atributo de origen `ia` y permanecen inicialmente sin validar.
+
+### b) Exclusión de preguntas no validadas en los simulacros
+
+Se comprueba que las preguntas generadas mediante inteligencia artificial que todavía no han sido aprobadas por un administrador no sean incorporadas al conjunto de preguntas disponibles para los simulacros.
+
+Esta condición permite mantener un control de calidad sobre el contenido presentado a los estudiantes.
+
+### c) Consulta administrativa de preguntas pendientes
+
+Se verifica que el administrador pueda consultar las preguntas generadas que todavía no han sido validadas mediante el filtro correspondiente.
+
+La consulta debe devolver únicamente las preguntas cuyo origen es la inteligencia artificial y cuyo estado de validación permanece pendiente.
+
+### d) Validación administrativa de preguntas
+
+Se comprueba que el administrador pueda aprobar una pregunta generada mediante la operación de validación correspondiente. Una vez aprobada, la pregunta debe dejar de aparecer en el listado de elementos pendientes.
+
+Con este escenario se verifica la comunicación entre el generador, el almacenamiento de preguntas y el módulo administrativo.
+
+
 ### 13.3 Pruebas de usabilidad
+La evaluación de usabilidad tiene como propósito analizar la facilidad de aprendizaje, navegación y utilización de Adapta 11 por parte de sus diferentes tipos de usuarios: estudiantes, profesores y administradores.
+
+La interfaz está diseñada para permitir el acceso a las funcionalidades según el rol asignado, facilitando la realización de prácticas, simulacros, consulta de resultados y administración del contenido.
+
+Entre los aspectos que se consideran relevantes para evaluar se encuentran:
+
+- Facilidad de acceso y comprensión de las opciones de navegación.
+- Claridad de los enunciados y las opciones de respuesta.
+- Facilidad para iniciar y finalizar una práctica o simulacro.
+- Comprensión de los resultados y la retroalimentación obtenida.
+- Claridad de las explicaciones sobre el nivel de dificultad y los motivos de selección de preguntas.
+- Facilidad de consulta de estadísticas y seguimiento del desempeño.
+- Adaptación de la interfaz a dispositivos móviles.
+
+Como instrumento de evaluación se propone utilizar el cuestionario System Usability Scale (SUS), desarrollado por Brooke (1996), que permite obtener una medida estandarizada de la percepción de usabilidad de un sistema.
+
+Sin embargo, no se dispone de resultados de una aplicación formal del instrumento a una muestra de estudiantes, profesores o administradores. Por esta razón, no se reporta una puntuación SUS ni se presentan conclusiones estadísticas sobre la satisfacción de los usuarios.
+
+La evaluación con usuarios reales queda planteada como una actividad pendiente para una siguiente etapa del proyecto. Esta permitirá identificar dificultades de navegación, oportunidades de mejora en la interfaz y aspectos relacionados con la comprensión de la retroalimentación proporcionada por el sistema.
+
 
 ## 14. Resultados, discusión y conclusiones
 
+# 14. Resultados, discusión y conclusiones
+
+## 14.1. Resultados obtenidos
+
+Como resultado del proceso de desarrollo se obtuvo Adapta 11, una aplicación web funcional orientada a apoyar la preparación de los estudiantes para las pruebas Saber 11 en las áreas de Lectura Crítica y Matemáticas.
+
+El sistema integra un banco estructurado de 104 preguntas, distribuidas en 51 preguntas de Lectura Crítica y 53 de Matemáticas, clasificadas por competencia, eje temático y dificultad. Esta organización permite realizar búsquedas y selecciones de preguntas de acuerdo con las necesidades de práctica de cada estudiante.
+
+Entre los principales resultados funcionales y técnicos se destacan:
+
+- **Gestión de usuarios y roles:** implementación de tres perfiles de acceso: estudiante, profesor y administrador, con funcionalidades y permisos diferenciados.
+- **Banco de preguntas:** administración de preguntas, imágenes y textos compartidos, con mecanismos para crear, editar y desactivar contenidos.
+- **Práctica dirigida:** selección de ejercicios según materia, competencia, eje temático y nivel de dificultad.
+- **Seguimiento de dificultad histórica:** cálculo del porcentaje de aciertos de cada pregunta a partir de las respuestas registradas, permitiendo clasificarla como fácil, media, difícil o no medida.
+- **Práctica adaptativa:** implementación de la estrategia S1, que distribuye las preguntas entre refuerzo, exploración y repaso, considerando el historial de desempeño del estudiante.
+- **Retroalimentación:** presentación de explicaciones, resultados por competencia y motivos asociados a la selección adaptativa de las preguntas.
+- **Seguimiento académico:** almacenamiento de sesiones y respuestas para consultar la evolución del desempeño.
+- **Despliegue web:** publicación de la aplicación mediante Render y utilización de Roble como servicio de persistencia de datos.
+
+En términos de implementación, los resultados evidencian la construcción de un prototipo que integra los principales módulos requeridos para ofrecer una experiencia de práctica estructurada y adaptativa.
+
+## 14.2. Resultados de la simulación del mecanismo adaptativo
+
+La estrategia adaptativa implementada corresponde a S1, una regla determinista que utiliza el historial de respuestas del estudiante para estimar su dominio por competencia y distribuir las preguntas de cada sesión.
+
+La selección contempla tres componentes:
+
+- **Refuerzo (60 %):** prioriza las competencias identificadas como débiles.
+- **Exploración (25 %):** incorpora competencias sobre las cuales todavía no existe suficiente información.
+- **Repaso (15 %):** mantiene la práctica de competencias en las que el estudiante presenta un dominio estimado.
+
+El mecanismo utiliza una estimación suavizada del porcentaje de aciertos para evitar conclusiones extremas cuando existe poca información. Además, procura evitar la repetición de preguntas ya respondidas mientras existan alternativas disponibles.
+
+Durante el desarrollo se contempló la comparación entre una estrategia de selección aleatoria (S0) y la estrategia adaptativa S1 mediante simulaciones con estudiantes sintéticos. Este procedimiento permite analizar el comportamiento de las reglas de selección bajo escenarios controlados, sin depender exclusivamente de la interacción de usuarios reales.
+
+Sin embargo, el informe no presenta los valores numéricos finales de dicha comparación. Por esta razón, no se afirma que S1 haya obtenido una mejora porcentual determinada ni que haya demostrado una superioridad estadística frente a S0.
+
+La simulación constituye una herramienta de verificación del comportamiento del algoritmo, pero no reemplaza una evaluación pedagógica con estudiantes reales.
+
+## 14.3. Discusión de los resultados
+
+Los resultados obtenidos muestran que es posible integrar en una misma plataforma la organización de un banco de preguntas, el seguimiento del desempeño y un mecanismo de selección que utiliza información histórica para orientar las actividades de práctica.
+
+Una de las principales decisiones de diseño fue implementar una estrategia determinista y explicable en lugar de utilizar un modelo de aprendizaje automático más complejo. Esta elección responde al tamaño del banco de preguntas y a la disponibilidad limitada de datos reales. De esta manera, el sistema puede justificar por qué presenta una pregunta y qué competencia busca reforzar.
+
+La incorporación de niveles de dificultad calculados a partir de las respuestas registradas representa otro aporte importante, debido a que permite complementar las etiquetas manuales del banco con información derivada del comportamiento de los estudiantes.
+
+No obstante, el alcance de los resultados está condicionado por algunas limitaciones:
+
+- El banco contiene 104 preguntas, cantidad que restringe la variedad disponible en determinadas combinaciones de competencia y eje temático.
+- La distribución de preguntas no es uniforme, especialmente en algunos componentes de Matemáticas.
+- Los parámetros de selección adaptativa son valores fundamentados en el diseño del proyecto, pero todavía no han sido calibrados mediante un volumen amplio de respuestas reales.
+- La estrategia implementada no utiliza aprendizaje automático ni teoría de respuesta al ítem para estimar el dominio.
+- No se cuenta con mediciones formales de rendimiento, concurrencia o escalabilidad.
+- No se dispone de resultados cuantitativos de una evaluación de usabilidad.
+- La efectividad pedagógica del mecanismo adaptativo todavía requiere una evaluación experimental con estudiantes reales.
+
+Estas limitaciones no invalidan el funcionamiento técnico del prototipo, pero establecen una diferencia entre demostrar que el sistema implementa correctamente sus reglas de selección y demostrar que dichas reglas producen mejores resultados de aprendizaje.
+
+## 14.4. Cumplimiento de los objetivos
+
+En relación con los objetivos establecidos, se evidencia el cumplimiento de los principales componentes de construcción e implementación del proyecto.
+
+El banco de preguntas fue estructurado y clasificado para las áreas de Matemáticas y Lectura Crítica. También se implementó la selección dirigida, permitiendo al estudiante definir los criterios de práctica.
+
+Asimismo, se desarrolló el mecanismo de selección adaptativa basado en el historial de respuestas, junto con el seguimiento del desempeño y la retroalimentación por competencia.
+
+El objetivo relacionado con la adaptación se considera cumplido desde el punto de vista de la implementación técnica, dado que el sistema estima el dominio, distribuye las preguntas según las necesidades identificadas y presenta una justificación de cada selección. Sin embargo, su efectividad pedagógica no puede considerarse demostrada hasta realizar pruebas con estudiantes reales.
+
+Por lo tanto, el objetivo general se considera alcanzado en términos del diseño y construcción del prototipo propuesto, manteniendo como trabajo pendiente la evaluación experimental de sus beneficios en el proceso de aprendizaje.
+
+## 14.5. Conclusiones
+
+El desarrollo de Adapta 11 permitió construir una plataforma web que integra la práctica dirigida, la selección adaptativa de preguntas y el seguimiento del desempeño académico para la preparación de las pruebas Saber 11 en Matemáticas y Lectura Crítica.
+
+La estructuración del banco de preguntas constituye una base fundamental para el funcionamiento de la solución, ya que permite relacionar cada ejercicio con una competencia, un eje temático y un nivel de dificultad. Esta organización facilita tanto la selección dirigida como el procesamiento del historial necesario para la adaptación.
+
+La implementación de la estrategia S1 permitió incorporar un mecanismo de selección basado en reglas explícitas, que considera las fortalezas, debilidades y necesidades de exploración del estudiante. Además, la explicación del motivo de selección aporta transparencia al proceso y permite que el usuario comprenda la intención de las actividades propuestas.
+
+Desde el punto de vista técnico, el proyecto permitió integrar tecnologías web, servicios externos y mecanismos de persistencia para construir una aplicación accesible desde un navegador. La separación entre frontend, backend y base de datos facilitó la organización de los componentes y la evolución progresiva de la solución.
+
+Finalmente, se concluye que Adapta 11 constituye un prototipo funcional que demuestra la viabilidad técnica de implementar una experiencia de práctica adaptativa y explicable para la preparación de Saber 11. Sin embargo, la demostración de su impacto educativo requiere ampliar el banco de preguntas, recopilar más información de desempeño y realizar una evaluación controlada con estudiantes reales.
+
+De esta manera, el proyecto establece una base tecnológica sobre la cual pueden desarrollarse futuras mejoras orientadas a fortalecer la personalización, la calidad del contenido y la efectividad del proceso de preparación académica.
 ## 15. Trabajo futuro
 
 **Evaluación con estudiantes reales.** Activar el registro de estrategia y motivo (`GUARDAR_ESTRATEGIA=1`), asignar estudiantes a práctica dirigida o adaptativa y medir el cambio de desempeño en sus competencias débiles. Este es el trabajo más importante pendiente, porque es el que permite afirmar o descartar el beneficio pedagógico.
