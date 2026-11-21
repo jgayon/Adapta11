@@ -722,25 +722,14 @@ Con este escenario se verifica la comunicación entre el generador, el almacenam
 
 
 ### 13.3 Pruebas de usabilidad
-La evaluación de usabilidad tiene como propósito analizar la facilidad de aprendizaje, navegación y utilización de Adapta 11 por parte de sus diferentes tipos de usuarios: estudiantes, profesores y administradores.
 
-La interfaz está diseñada para permitir el acceso a las funcionalidades según el rol asignado, facilitando la realización de prácticas, simulacros, consulta de resultados y administración del contenido.
+Se realizó una validación funcional inicial de Adapta 11 con un grupo reducido de estudiantes en el entorno desplegado. Los participantes ingresaron a la plataforma, realizaron ejercicios de práctica, desarrollaron simulacros y consultaron sus respuestas y resultados.
 
-Entre los aspectos que se consideran relevantes para evaluar se encuentran:
+Esta actividad permitió observar el funcionamiento de las principales funcionalidades desde la perspectiva de los usuarios y comprobar su interacción con la plataforma.
 
-- Facilidad de acceso y comprensión de las opciones de navegación.
-- Claridad de los enunciados y las opciones de respuesta.
-- Facilidad para iniciar y finalizar una práctica o simulacro.
-- Comprensión de los resultados y la retroalimentación obtenida.
-- Claridad de las explicaciones sobre el nivel de dificultad y los motivos de selección de preguntas.
-- Facilidad de consulta de estadísticas y seguimiento del desempeño.
-- Adaptación de la interfaz a dispositivos móviles.
+Debido al tamaño reducido del grupo, los resultados tienen un carácter exploratorio y no permiten generalizar conclusiones sobre la usabilidad o la efectividad pedagógica de la herramienta. Tampoco se aplicó un instrumento estandarizado de medición de usabilidad.
 
-Como instrumento de evaluación se propone utilizar el cuestionario System Usability Scale (SUS), desarrollado por Brooke (1996), que permite obtener una medida estandarizada de la percepción de usabilidad de un sistema.
-
-Sin embargo, no se dispone de resultados de una aplicación formal del instrumento a una muestra de estudiantes, profesores o administradores. Por esta razón, no se reporta una puntuación SUS ni se presentan conclusiones estadísticas sobre la satisfacción de los usuarios.
-
-La evaluación con usuarios reales queda planteada como una actividad pendiente para una siguiente etapa del proyecto. Esta permitirá identificar dificultades de navegación, oportunidades de mejora en la interfaz y aspectos relacionados con la comprensión de la retroalimentación proporcionada por el sistema.
+Se propone complementar esta validación con instrumentos como el cuestionario System Usability Scale (SUS) en futuras etapas del proyecto.
 
 
 ## 14. Resultados, discusión y conclusiones
