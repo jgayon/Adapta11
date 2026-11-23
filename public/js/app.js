@@ -2305,6 +2305,11 @@
 
   /* ---------- Practica ---------- */
 
+  // Poner en true para volver a mostrar el selector "¿Como quieres practicar?"
+  // (adaptativa / elegir yo) y el selector de nivel de dificultad en la
+  // practica. En false, el estudiante ve directo competencia y eje, sin nivel.
+  const MOSTRAR_MODO_Y_NIVEL_PRACTICA = false;
+
   function renderPracticaConfig() {
     const materiaInicial = 'lectura_critica';
     app().innerHTML = `
@@ -2320,15 +2325,15 @@
               <option value="matematicas">Matematicas</option>
             </select>
           </div>
-          <div class="field">
+          <div class="field" ${MOSTRAR_MODO_Y_NIVEL_PRACTICA ? '' : 'style="display:none;"'}>
             <label>¿Cómo quieres practicar?</label>
             <select name="modo" id="input-p-modo">
-              <option value="adaptativo" selected>Adaptativa (el sistema elige por ti)</option>
-              <option value="dirigida">Elegir yo: competencia, eje y nivel</option>
+              <option value="adaptativo" ${MOSTRAR_MODO_Y_NIVEL_PRACTICA ? 'selected' : ''}>Adaptativa (el sistema elige por ti)</option>
+              <option value="dirigida" ${MOSTRAR_MODO_Y_NIVEL_PRACTICA ? '' : 'selected'}>Elegir yo: competencia, eje y nivel</option>
             </select>
             <p class="hint mb-0" id="hint-p-modo">El sistema usa tu historial: refuerza las competencias donde más fallas, explora las que casi no has practicado y repasa las que dominas. Cada pregunta te explica por qué se eligió.</p>
           </div>
-          <div id="bloque-manual" class="stack" style="display:none;">
+          <div id="bloque-manual" class="stack" style="${MOSTRAR_MODO_Y_NIVEL_PRACTICA ? 'display:none;' : ''}">
           <div class="field">
             <label>Competencia (opcional)</label>
             <select name="competencia" id="input-p-competencia"></select>
@@ -2337,7 +2342,7 @@
             <label>Eje tematico (opcional)</label>
             <select name="eje" id="input-p-eje"></select>
           </div>
-          <div class="field">
+          <div class="field" ${MOSTRAR_MODO_Y_NIVEL_PRACTICA ? '' : 'style="display:none;"'}>
             <label>Nivel de dificultad</label>
             <select name="nivel">
               <option value="aleatorio" selected>Aleatorio (todos los niveles)</option>
