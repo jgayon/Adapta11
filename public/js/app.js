@@ -1018,7 +1018,7 @@
             <p class="hint mb-0" style="margin-bottom:0.4rem;">Por materia</p>
             <table>
               <thead><tr><th>Materia</th><th>Activas</th><th>Con imagen</th><th>Con texto</th><th>Pend. validar</th></tr></thead>
-              <tbody>${MATERIAS.map(filaMateria).join('')}</tbody>
+              <tbody>${['lectura_critica', 'matematicas'].map(filaMateria).join('')}</tbody>
             </table>
           </div>
           <div style="min-width:320px; flex:1;">
