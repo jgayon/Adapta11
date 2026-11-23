@@ -19,6 +19,13 @@
 // autenticacion propia de Adapta11 (bcrypt + JWT en cookie, ver
 // middleware/auth.js) no cambia: Roble aqui es solo el almacen de datos.
 
+// Proveedor temporal: con DB_PROVIDER=turso se usa src/db-turso.js (Turso/libSQL)
+// en lugar de Roble. Quita esa variable para volver a Roble.
+if (process.env.DB_PROVIDER === 'turso') {
+  module.exports = require('./db-turso');
+  return;
+}
+
 const ROBLE_BASE_URL = process.env.ROBLE_BASE_URL || 'https://roble-api.test-openlab.uninorte.edu.co';
 const ROBLE_CONTRACT_ID = process.env.ROBLE_CONTRACT_ID;
 const ROBLE_SERVICE_EMAIL = process.env.ROBLE_SERVICE_EMAIL;
